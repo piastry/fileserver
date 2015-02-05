@@ -19,6 +19,8 @@
 
 #define NUM_THREADS 3
 
+#define DEBUG 1
+
 struct worker {
 	pthread_t tid;
 	struct event_base *base;
@@ -26,6 +28,12 @@ struct worker {
 
 static struct worker workers[NUM_THREADS-1];
 static struct event_base *accept_base;
+
+#define log(format,args...) \
+	do { \
+		if (DEBUG) \
+			printf(format, ## args); \
+	} while(0)
 
 void
 readcb(struct bufferevent *bev, void *ctx)
@@ -46,10 +54,10 @@ readcb(struct bufferevent *bev, void *ctx)
 		int in;
 
 		in = evbuffer_remove(input, buf, sizeof(buf));
-		printf("%.*s", in, buf);
+		log("%.*s", in, buf);
 //		evbuffer_add(output, buf, n);
 	}
-//	printf("\n");
+//	log("\n");
 //	evbuffer_add(output, "\n", 1);
 }
 
@@ -79,14 +87,14 @@ do_accept(evutil_socket_t listener, short event, void *arg)
 	socklen_t slen = sizeof(struct sockaddr_storage);
 	int fd;
 
-	printf("got event\n");
+	log("got event\n");
 
 	fd = accept(listener, (struct sockaddr*)&ss, &slen);
-	printf("accept\n");
+	log("accept\n");
 	if (fd < 0) {
 		fprintf(stderr, "accept error\n");
 	} else if (fd > FD_SETSIZE) {
-		printf("close fd\n");
+		log("close fd\n");
 		close(fd);
 	} else {
 		struct bufferevent *bev;
@@ -98,7 +106,7 @@ do_accept(evutil_socket_t listener, short event, void *arg)
 		bufferevent_setcb(bev, readcb, NULL, errorcb, &workers[to_thread]);
 		bufferevent_setwatermark(bev, EV_READ, 0, MAX_LINE);
 		bufferevent_enable(bev, EV_READ | EV_WRITE);
-		printf("setup bufferevent to thread %zu\n", workers[to_thread].tid);
+		log("setup bufferevent to thread %zu\n", workers[to_thread].tid);
 		to_thread = (to_thread + 1) % (NUM_THREADS-1);
 	}
 }
@@ -109,7 +117,7 @@ worker_thread(void *arg)
 	struct worker *w = (struct worker *)arg;
 	int rc = 0;
 
-	printf("start thread %zu\n", w->tid);
+	log("start thread %zu\n", w->tid);
 
 	evthread_use_pthreads();
 	w->base = event_base_new();
@@ -122,14 +130,14 @@ worker_thread(void *arg)
 	evthread_make_base_notifiable(w->base);
 
 	while (event_base_dispatch(w->base) == 1) {
-	//	printf("before sleep %zu\n", w->tid);
+	//	log("before sleep %zu\n", w->tid);
 		usleep(THREAD_DISPATCH_TIMEOUT);
-	//	printf("after sleep %zu\n", w->tid);
+	//	log("after sleep %zu\n", w->tid);
 	}
 
 	event_base_free(w->base);
 
-	printf("finish thread %zu\n", w->tid);
+	log("finish thread %zu\n", w->tid);
 	pthread_exit(&rc);
 	return NULL;
 }
@@ -237,7 +245,7 @@ fileserver(void)
 	event_add(listener_event, NULL);
 
 	accept_base = base;
-	printf("fileserver started\n");
+	log("fileserver started\n");
 	event_base_dispatch(base);
 
 	accept_base = NULL;
@@ -247,7 +255,7 @@ fileserver(void)
 
 	thread_pool_shutdown();
 
-	printf("fileserver stopped\n");
+	log("fileserver stopped\n");
 	return 0;
 }
 
