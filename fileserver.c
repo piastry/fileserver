@@ -26,6 +26,11 @@ struct worker {
 	struct event_base *base;
 };
 
+struct client {
+	struct worker *worker;
+	int file_fd;
+};
+
 static struct worker workers[NUM_THREADS-1];
 static struct event_base *accept_base;
 
@@ -39,7 +44,7 @@ void
 readcb(struct bufferevent *bev, void *ctx)
 {
 	struct evbuffer *input, *output;
-	struct worker *w = (struct worker *)ctx;
+	struct client *client = (struct client *)ctx;
 	char *line;
 	size_t n;
 	int i;
@@ -48,7 +53,7 @@ readcb(struct bufferevent *bev, void *ctx)
 	input = bufferevent_get_input(bev);
 //	output = bufferevent_get_output(bev);
 
-//	printf("readcb from %zu thread\n", w->tid);
+//	printf("readcb from %zu thread\n", client->worker->tid);
 
 	while (evbuffer_get_length(input)) {
 		int in;
@@ -75,6 +80,7 @@ errorcb(struct bufferevent *bev, short error, void *ctx)
 		/* ... */
 	}
 	bufferevent_free(bev);
+	free(ctx);
 }
 
 static int to_thread = 0;
@@ -98,6 +104,17 @@ do_accept(evutil_socket_t listener, short event, void *arg)
 		close(fd);
 	} else {
 		struct bufferevent *bev;
+		struct client *client;
+
+		client = malloc(sizeof(struct client));
+		if (!client) {
+			perror("client malloc");
+			close(fd);
+			return;
+		}
+
+		client->worker = &workers[to_thread];
+		client->file_fd = -1;
 
 		evutil_make_socket_nonblocking(fd);
 
@@ -106,9 +123,10 @@ do_accept(evutil_socket_t listener, short event, void *arg)
 		if (!bev) {
 			perror("buffer socket new");
 			close(fd);
+			free(client);
 			return;
 		}
-		bufferevent_setcb(bev, readcb, NULL, errorcb, &workers[to_thread]);
+		bufferevent_setcb(bev, readcb, NULL, errorcb, client);
 		bufferevent_setwatermark(bev, EV_READ, 0, MAX_LINE);
 		bufferevent_enable(bev, EV_READ | EV_WRITE);
 		log("setup bufferevent to thread %zu\n", workers[to_thread].tid);
