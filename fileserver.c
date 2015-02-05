@@ -103,6 +103,11 @@ do_accept(evutil_socket_t listener, short event, void *arg)
 
 		bev = bufferevent_socket_new(workers[to_thread].base, fd,
 					     BEV_OPT_CLOSE_ON_FREE | BEV_OPT_THREADSAFE);
+		if (!bev) {
+			perror("buffer socket new");
+			close(fd);
+			return;
+		}
 		bufferevent_setcb(bev, readcb, NULL, errorcb, &workers[to_thread]);
 		bufferevent_setwatermark(bev, EV_READ, 0, MAX_LINE);
 		bufferevent_enable(bev, EV_READ | EV_WRITE);
