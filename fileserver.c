@@ -14,6 +14,9 @@
 #include <signal.h>
 #include <string.h>
 #include <endian.h>
+#include <msgpack.h>
+
+#include "proto.h"
 
 #define FILESERVER_PORT 1113
 #define MAX_LINE 65536
@@ -71,6 +74,88 @@ client_init(struct worker *worker)
 }
 
 static int
+unpack_hdr(msgpack_unpacker *pac, struct sfp_hdr *hdr)
+{
+	msgpack_unpacked msg;
+	msgpack_object root;
+
+	msgpack_unpacked_init(&msg);
+
+	/* unpack proto string */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return -1;
+	root = msg.data;
+	msgpack_object_print(stdout, root);
+	printf("\n");
+	if (root.type != MSGPACK_OBJECT_RAW)
+		return -1;
+	if (root.via.raw.size != 4)
+		return -1;
+	if (strncmp(root.via.raw.ptr, " sfp", 4))
+		return -1;
+	memcpy(hdr->proto, root.via.raw.ptr, 4);
+
+	/* unpack operation code */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return -1;
+	root = msg.data;
+	msgpack_object_print(stdout, root);
+	printf("\n");
+	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+		return -1;
+	hdr->op = (uint8_t)root.via.u64;
+
+	/* unpack status code */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return -1;
+	root = msg.data;
+	msgpack_object_print(stdout, root);
+	printf("\n");
+	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+		return -1;
+	hdr->status = (uint32_t)root.via.u64;
+	msgpack_unpacked_destroy(&msg);
+
+	return 0;
+}
+
+/* we have the entire message - unpack it and process */
+static int
+process_message(struct client *client)
+{
+	struct sfp_hdr hdr;
+	msgpack_unpacker pac;
+	int rc;
+
+	msgpack_unpacker_init(&pac, MSGPACK_UNPACKER_INIT_BUFFER_SIZE);
+	msgpack_unpacker_reserve_buffer(&pac, client->buf_size);
+	memcpy(msgpack_unpacker_buffer(&pac), client->buf, client->buf_size);
+	msgpack_unpacker_buffer_consumed(&pac, client->buf_size);
+
+	rc = unpack_hdr(&pac, &hdr);
+	if (rc) {
+		msgpack_unpacker_destroy(&pac);
+		return rc;
+	}
+
+	switch (hdr.op) {
+	case SFP_OP_OPEN:
+		break;
+	case SFP_OP_READ:
+		break;
+	case SFP_OP_WRITE:
+		break;
+	case SFP_OP_CLOSE:
+		break;
+	dafault:
+		break;
+	}
+
+	msgpack_unpacker_destroy(&pac);
+	return rc;
+}
+
+static int
 process_state_new(struct evbuffer *input, struct client *client)
 {
 	size_t len = evbuffer_get_length(input);
@@ -119,11 +204,12 @@ process_state_ab(struct evbuffer *input, struct client *client)
 	if (client->remaining_size == 0) {
 		/* got full msg */
 		client->state = STATE_GOT_MSG;
+		return process_message(client);
 	}
 	return 0;
 }
 
-static int
+static void
 discard_remaining(struct evbuffer *input)
 {
 	char buf[1024];
@@ -131,8 +217,6 @@ discard_remaining(struct evbuffer *input)
 
 	while (evbuffer_get_length(input))
 		len = evbuffer_remove(input, buf, sizeof(buf));
-
-	return 0;
 }
 
 static void
@@ -156,7 +240,7 @@ readcb(struct bufferevent *bev, void *ctx)
 			rc = process_state_ab(input, client);
 			break;
 		case STATE_GOT_MSG:
-			rc = discard_remaining(input);
+			discard_remaining(input);
 			break;
 		default:
 			break;
