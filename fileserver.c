@@ -12,6 +12,7 @@
 #include <event2/thread.h>
 #include <pthread.h>
 #include <signal.h>
+#include <string.h>
 
 #define FILESERVER_PORT 1113
 #define MAX_LINE 65536
@@ -29,6 +30,10 @@ struct worker {
 struct client {
 	struct worker *worker;
 	int file_fd;
+	char *req_buf;
+	char *cur;
+	size_t buf_size;
+	size_t remaining_size;
 };
 
 static struct worker workers[NUM_THREADS-1];
@@ -39,6 +44,24 @@ static struct event_base *accept_base;
 		if (DEBUG) \
 			printf(format, ## args); \
 	} while(0)
+
+static struct client *
+client_init(struct worker *worker)
+{
+	struct client *client;
+
+	client = malloc(sizeof(struct client));
+	if (!client) {
+		perror("client malloc");
+		return NULL;
+	}
+
+	memset(client, 0, sizeof(struct client));
+
+	client->worker = worker;
+	client->file_fd = -1;
+	return client;
+}
 
 void
 readcb(struct bufferevent *bev, void *ctx)
@@ -106,15 +129,12 @@ do_accept(evutil_socket_t listener, short event, void *arg)
 		struct bufferevent *bev;
 		struct client *client;
 
-		client = malloc(sizeof(struct client));
+		client = client_init(&workers[to_thread]);
 		if (!client) {
-			perror("client malloc");
+			perror("client init");
 			close(fd);
 			return;
 		}
-
-		client->worker = &workers[to_thread];
-		client->file_fd = -1;
 
 		evutil_make_socket_nonblocking(fd);
 
