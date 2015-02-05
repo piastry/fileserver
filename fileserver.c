@@ -13,9 +13,11 @@
 #include <pthread.h>
 #include <signal.h>
 #include <string.h>
+#include <endian.h>
 
 #define FILESERVER_PORT 1113
 #define MAX_LINE 65536
+#define MIN_LINE 4
 #define THREAD_DISPATCH_TIMEOUT 1000
 
 #define NUM_THREADS 3
@@ -27,10 +29,15 @@ struct worker {
 	struct event_base *base;
 };
 
+#define STATE_NEW  0
+#define STATE_ALLOC_BUF 1
+#define STATE_GOT_MSG 2
+
 struct client {
 	struct worker *worker;
 	int file_fd;
-	char *req_buf;
+	int state;
+	char *buf;
 	char *cur;
 	size_t buf_size;
 	size_t remaining_size;
@@ -63,29 +70,104 @@ client_init(struct worker *worker)
 	return client;
 }
 
-void
+static int
+process_state_new(struct evbuffer *input, struct client *client)
+{
+	size_t len = evbuffer_get_length(input);
+	uint32_t req_len_be32;
+
+	if (len < MIN_LINE) {
+		fprintf(stderr, "evbuffer lenght less than %u\n", MIN_LINE);
+		return -1;
+	}
+
+	len = evbuffer_remove(input, &req_len_be32, MIN_LINE);
+	if (len != MIN_LINE) {
+		fprintf(stderr, "can't read %u bytes from the buffer\n", MIN_LINE);
+		return -1;
+	}
+
+	client->buf_size = be32toh(req_len_be32);
+	log("buf_size=%zu\n", client->buf_size);
+	if (client->buf_size > MAX_LINE) {
+		fprintf(stderr, "too big request\n");
+		return -1;
+	}
+
+	client->buf = malloc(client->buf_size);
+	if (!client->buf) {
+		perror("client buf malloc");
+		return -1;
+	}
+
+	client->cur = client->buf;
+	client->remaining_size = client->buf_size;
+	client->state = STATE_ALLOC_BUF;
+	return 0;
+}
+
+static int
+process_state_ab(struct evbuffer *input, struct client *client)
+{
+	size_t len = evbuffer_get_length(input);
+
+	len = evbuffer_remove(input, client->cur, client->remaining_size);
+	log("%.*s\n", (int)len, client->cur);
+	client->remaining_size -= len;
+	client->cur += len;
+
+	if (client->remaining_size == 0) {
+		/* got full msg */
+		client->state = STATE_GOT_MSG;
+	}
+	return 0;
+}
+
+static int
+discard_remaining(struct evbuffer *input)
+{
+	char buf[1024];
+	size_t len;
+
+	while (evbuffer_get_length(input))
+		len = evbuffer_remove(input, buf, sizeof(buf));
+
+	return 0;
+}
+
+static void
 readcb(struct bufferevent *bev, void *ctx)
 {
 	struct evbuffer *input, *output;
 	struct client *client = (struct client *)ctx;
-	char *line;
-	size_t n;
-	int i;
-	char buf[MAX_LINE];
+	int rc = 0;
 
 	input = bufferevent_get_input(bev);
 //	output = bufferevent_get_output(bev);
 
-//	printf("readcb from %zu thread\n", client->worker->tid);
+	log("readcb from %zu thread\n", client->worker->tid);
 
-	while (evbuffer_get_length(input)) {
-		int in;
-
-		in = evbuffer_remove(input, buf, sizeof(buf));
-		log("%.*s", in, buf);
-//		evbuffer_add(output, buf, n);
+	while (evbuffer_get_length(input) && !rc) {
+		switch (client->state) {
+		case STATE_NEW:
+			rc = process_state_new(input, client);
+			break;
+		case STATE_ALLOC_BUF:
+			rc = process_state_ab(input, client);
+			break;
+		case STATE_GOT_MSG:
+			rc = discard_remaining(input);
+			break;
+		default:
+			break;
+		}
 	}
-//	log("\n");
+
+	if (rc) {
+		fprintf(stderr, "freeing client\n");
+		bufferevent_free(bev);
+		free(ctx);
+	}
 //	evbuffer_add(output, "\n", 1);
 }
 
@@ -147,7 +229,7 @@ do_accept(evutil_socket_t listener, short event, void *arg)
 			return;
 		}
 		bufferevent_setcb(bev, readcb, NULL, errorcb, client);
-		bufferevent_setwatermark(bev, EV_READ, 0, MAX_LINE);
+		bufferevent_setwatermark(bev, EV_READ, MIN_LINE, MAX_LINE);
 		bufferevent_enable(bev, EV_READ | EV_WRITE);
 		log("setup bufferevent to thread %zu\n", workers[to_thread].tid);
 		to_thread = (to_thread + 1) % (NUM_THREADS-1);
