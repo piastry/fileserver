@@ -73,93 +73,6 @@ client_init(struct worker *worker)
 	return client;
 }
 
-static int inline
-unpacked_destroy_and_exit(msgpack_unpacked *msg, int rc)
-{
-	msgpack_unpacked_destroy(msg);
-	return rc;
-}
-
-static int
-unpack_hdr(msgpack_unpacker *pac, struct sfp_hdr *hdr)
-{
-	msgpack_unpacked msg;
-	msgpack_object root;
-
-	msgpack_unpacked_init(&msg);
-
-	/* unpack proto string */
-	if (!msgpack_unpacker_next(pac, &msg))
-		return unpacked_destroy_and_exit(&msg, -1);
-	root = msg.data;
-	msgpack_object_print(stdout, root);
-	printf("\n");
-	if (root.type != MSGPACK_OBJECT_RAW)
-		return unpacked_destroy_and_exit(&msg, -1);
-	if (root.via.raw.size != 4)
-		return unpacked_destroy_and_exit(&msg, -1);
-	if (strncmp(root.via.raw.ptr, " sfp", 4))
-		return unpacked_destroy_and_exit(&msg, -1);
-	memcpy(hdr->proto, root.via.raw.ptr, 4);
-
-	/* unpack operation code */
-	if (!msgpack_unpacker_next(pac, &msg))
-		return unpacked_destroy_and_exit(&msg, -1);
-	root = msg.data;
-	msgpack_object_print(stdout, root);
-	printf("\n");
-	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
-		return unpacked_destroy_and_exit(&msg, -1);
-	hdr->op = (uint8_t)root.via.u64;
-
-	/* unpack status code */
-	if (!msgpack_unpacker_next(pac, &msg))
-		return unpacked_destroy_and_exit(&msg, -1);
-	root = msg.data;
-	msgpack_object_print(stdout, root);
-	printf("\n");
-	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
-		return unpacked_destroy_and_exit(&msg, -1);
-	hdr->status = (uint32_t)root.via.u64;
-
-	return unpacked_destroy_and_exit(&msg, 0);
-}
-
-static int
-unpack_open_req(msgpack_unpacker *pac, struct sfp_open_req *open_req)
-{
-	msgpack_unpacked msg;
-	msgpack_object root;
-
-	msgpack_unpacked_init(&msg);
-
-	/* unpack open mode */
-	if (!msgpack_unpacker_next(pac, &msg))
-		return unpacked_destroy_and_exit(&msg, -1);
-	root = msg.data;
-	msgpack_object_print(stdout, root);
-	printf("\n");
-	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
-		return unpacked_destroy_and_exit(&msg, -1);
-	open_req->mode = (uint8_t)root.via.u64;
-
-	/* unpack filename */
-	if (!msgpack_unpacker_next(pac, &msg))
-		return unpacked_destroy_and_exit(&msg, -1);
-	root = msg.data;
-	msgpack_object_print(stdout, root);
-	printf("\n");
-	if (root.type != MSGPACK_OBJECT_RAW)
-		return unpacked_destroy_and_exit(&msg, -1);
-	open_req->filename = malloc(root.via.raw.size);
-	if (!open_req->filename)
-		return unpacked_destroy_and_exit(&msg, -1);
-	memcpy(open_req->filename, root.via.raw.ptr, root.via.raw.size);
-	open_req->fnlen = root.via.raw.size;
-
-	return unpacked_destroy_and_exit(&msg, 0);
-}
-
 /* parse an open request and send a response */
 static int
 process_open(msgpack_unpacker *pac, struct sfp_hdr *hdr,
@@ -169,7 +82,7 @@ process_open(msgpack_unpacker *pac, struct sfp_hdr *hdr,
 	int rc;
 
 	memcpy(&open_req.hdr, hdr, sizeof(struct sfp_hdr));
-	rc = unpack_open_req(pac, &open_req);
+	rc = sfp_unpack_open_req(pac, &open_req);
 	if (rc)
 		return rc;
 
@@ -190,7 +103,7 @@ process_message(struct client *client, struct evbuffer *output)
 	memcpy(msgpack_unpacker_buffer(&pac), client->buf, client->buf_size);
 	msgpack_unpacker_buffer_consumed(&pac, client->buf_size);
 
-	rc = unpack_hdr(&pac, &hdr);
+	rc = sfp_unpack_hdr(&pac, &hdr);
 	if (rc) {
 		msgpack_unpacker_destroy(&pac);
 		return rc;
@@ -287,7 +200,7 @@ readcb(struct bufferevent *bev, void *ctx)
 	input = bufferevent_get_input(bev);
 	output = bufferevent_get_output(bev);
 
-	log("readcb from %zu thread\n", client->worker->tid);
+	log("readcb from %zu thread size=%zu\n", client->worker->tid, evbuffer_get_length(input));
 
 	while (evbuffer_get_length(input) && !rc) {
 		switch (client->state) {

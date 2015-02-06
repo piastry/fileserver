@@ -4,11 +4,14 @@ CLI_LDFLAGS=-lmsgpack
 
 all: fileserver push
 
-fileserver: fileserver.c
-	$(CC) $< -o $@ $(SRV_LDFLAGS)
+fileserver: fileserver.c proto.o
+	$(CC) $< proto.o -o $@ $(SRV_LDFLAGS)
 
 push: push.c
 	$(CC) $< -o $@ $(CLI_LDFLAGS)
+
+proto.o: proto.c
+	$(CC) -c $< -o $@
 
 clean:
 	rm -rf *.o fileserver push

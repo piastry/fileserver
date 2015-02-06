@@ -3,6 +3,9 @@
  */
 
 #include <linux/types.h>
+#include <string.h>
+#include <endian.h>
+#include <msgpack.h>
 
 struct sfp_hdr {
 	char proto[4];
@@ -31,3 +34,13 @@ struct sfp_open_rsp {
 	struct sfp_hdr hdr;
 	uint32_t fd;
 };
+
+static int inline
+unpacked_destroy_and_exit(msgpack_unpacked *msg, int rc)
+{
+	msgpack_unpacked_destroy(msg);
+	return rc;
+}
+
+int sfp_unpack_hdr(msgpack_unpacker *pac, struct sfp_hdr *hdr);
+int sfp_unpack_open_req(msgpack_unpacker *pac, struct sfp_open_req *open_req);
