@@ -73,6 +73,13 @@ client_init(struct worker *worker)
 	return client;
 }
 
+static int inline
+unpacked_destroy_and_exit(msgpack_unpacked *msg, int rc)
+{
+	msgpack_unpacked_destroy(msg);
+	return rc;
+}
+
 static int
 unpack_hdr(msgpack_unpacker *pac, struct sfp_hdr *hdr)
 {
@@ -83,39 +90,39 @@ unpack_hdr(msgpack_unpacker *pac, struct sfp_hdr *hdr)
 
 	/* unpack proto string */
 	if (!msgpack_unpacker_next(pac, &msg))
-		return -1;
+		return unpacked_destroy_and_exit(&msg, -1);
 	root = msg.data;
 	msgpack_object_print(stdout, root);
 	printf("\n");
 	if (root.type != MSGPACK_OBJECT_RAW)
-		return -1;
+		return unpacked_destroy_and_exit(&msg, -1);
 	if (root.via.raw.size != 4)
-		return -1;
+		return unpacked_destroy_and_exit(&msg, -1);
 	if (strncmp(root.via.raw.ptr, " sfp", 4))
-		return -1;
+		return unpacked_destroy_and_exit(&msg, -1);
 	memcpy(hdr->proto, root.via.raw.ptr, 4);
 
 	/* unpack operation code */
 	if (!msgpack_unpacker_next(pac, &msg))
-		return -1;
+		return unpacked_destroy_and_exit(&msg, -1);
 	root = msg.data;
 	msgpack_object_print(stdout, root);
 	printf("\n");
 	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
-		return -1;
+		return unpacked_destroy_and_exit(&msg, -1);
 	hdr->op = (uint8_t)root.via.u64;
 
 	/* unpack status code */
 	if (!msgpack_unpacker_next(pac, &msg))
-		return -1;
+		return unpacked_destroy_and_exit(&msg, -1);
 	root = msg.data;
 	msgpack_object_print(stdout, root);
 	printf("\n");
 	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
-		return -1;
+		return unpacked_destroy_and_exit(&msg, -1);
 	hdr->status = (uint32_t)root.via.u64;
-	msgpack_unpacked_destroy(&msg);
 
+	msgpack_unpacked_destroy(&msg);
 	return 0;
 }
 
