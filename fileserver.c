@@ -14,6 +14,7 @@
 #include <signal.h>
 #include <string.h>
 #include <endian.h>
+#include <fcntl.h>
 #include <msgpack.h>
 
 #include "proto.h"
@@ -76,7 +77,22 @@ client_init(struct worker *worker)
 static int
 open_lock_file(struct sfp_open_req *open_req)
 {
-	return -1;
+	int fd, mode = 0;
+
+	if (open_req->mode == SFP_OMODE_READ)
+		mode |= O_RDONLY;
+	else if (open_req->mode == SFP_OMODE_WRITE)
+		mode |= O_WRONLY | O_TRUNC | O_CREAT;
+
+	fd = open(open_req->filename, mode);
+	if (fd < 0) {
+		perror("open file");
+		return fd;
+	}
+
+	/* lock file */
+
+	return fd;
 }
 
 /* parse an open request and send a response */
