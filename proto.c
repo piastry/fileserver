@@ -116,10 +116,11 @@ sfp_unpack_open_req(msgpack_unpacker *pac, struct sfp_open_req *open_req)
 	printf("\n");
 	if (root.type != MSGPACK_OBJECT_RAW)
 		return unpacked_destroy_and_exit(&msg, -1);
-	open_req->filename = malloc(root.via.raw.size);
+	open_req->filename = malloc(root.via.raw.size + 1);
 	if (!open_req->filename)
 		return unpacked_destroy_and_exit(&msg, -1);
 	memcpy(open_req->filename, root.via.raw.ptr, root.via.raw.size);
+	open_req->filename[root.via.raw.size] = '\0';
 	open_req->fnlen = root.via.raw.size;
 
 	return unpacked_destroy_and_exit(&msg, 0);
