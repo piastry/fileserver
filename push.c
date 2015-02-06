@@ -15,6 +15,22 @@
 #define FILESERVER_PORT 1113
 #define CHUNK_SIZE 65536
 
+static int
+get_bytes(int sock, void *buf, size_t len)
+{
+	size_t bytes = 0, rc;
+
+	while (len) {
+		rc = recv(sock, (char *)buf + bytes, len, 0);
+		if (rc <= 0)
+			return rc;
+		bytes += rc;
+		len -= bytes;
+	}
+
+	return bytes;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -22,10 +38,12 @@ main(int argc, char **argv)
 	struct sockaddr_in server;
 	FILE *file;
 	char buf[CHUNK_SIZE+1];
-	size_t len;
+	size_t len, off, msg_size;
 	char *msg;
 	struct sfp_open_rsp open_rsp;
+	struct sfp_write_rsp write_rsp;
 	msgpack_unpacker pac;
+	int rc;
 
 	if (argc < 2) {
 		fprintf(stderr, "specify filename\n");
@@ -66,7 +84,7 @@ main(int argc, char **argv)
 
 	free(msg);
 
-	if (recv(sock, &len, 4, 0) <= 0) {
+	if (get_bytes(sock, &len, 4) <= 0) {
 		perror("open rsp length");
 		return -1;
 	}
@@ -79,7 +97,7 @@ main(int argc, char **argv)
 		return -1;
 	}
 
-	if (recv(sock, buf, len, 0) <= 0) {
+	if (get_bytes(sock, buf, len) <= 0) {
 		perror("open rsp");
 		return -1;
 	}
@@ -95,22 +113,74 @@ main(int argc, char **argv)
 	}
 
 	if (sfp_unpack_open_rsp(&pac, &open_rsp)) {
-		fprintf(stderr, "unpack hdr error\n");
+		fprintf(stderr, "unpack open rsp error\n");
 		return -1;
 	}
-/*
+
 	printf("%*.s\n", 4, open_rsp.hdr.proto);
 	printf("%u\n", open_rsp.hdr.op);
 	printf("%d\n", open_rsp.hdr.status);
 	printf("%u\n", open_rsp.fd);
-*/
+
+	if (open_rsp.hdr.status != 0) {
+		fprintf(stderr, "server can't open file\n");
+		return -1;
+	}
+
+	off = 0;
 	while ((len = fread(buf, 1, CHUNK_SIZE, file)) > 0) {
-		buf[len] = '\0';
-		printf("%zu %s\n", len, buf);
-		if (send(sock, buf, len, 0) <= 0) {
-			perror("send");
+		msgpack_unpacker_destroy(&pac);
+		msgpack_unpacker_init(&pac, MSGPACK_UNPACKER_INIT_BUFFER_SIZE);
+
+		msg = sfp_create_write_req(open_rsp.fd, buf, len, off,
+					   &msg_size);
+		if (!msg) {
+			perror("malloc write req");
 			return -1;
 		}
+
+		if (send(sock, msg, msg_size, 0) <= 0) {
+			perror("write req send");
+			return -1;
+		}
+
+		free(msg);
+		off += len;
+
+		if ((rc = get_bytes(sock, &len, 4)) <= 0) {
+			fprintf(stderr, "write rsp length error %d\n", rc);
+			return -1;
+		}
+
+		len = be32toh(len);
+
+		if (len > CHUNK_SIZE) {
+			fprintf(stderr, "error: buffer is to big\n");
+			return -1;
+		}
+
+		if (recv(sock, buf, len, 0) <= 0) {
+			perror("write rsp");
+			return -1;
+		}
+
+		msgpack_unpacker_reserve_buffer(&pac, len);
+		memcpy(msgpack_unpacker_buffer(&pac), buf, len);
+		msgpack_unpacker_buffer_consumed(&pac, len);
+
+		if (sfp_unpack_hdr(&pac, &write_rsp.hdr)) {
+			fprintf(stderr, "unpack hdr error\n");
+			return -1;
+		}
+
+		if (sfp_unpack_write_rsp(&pac, &write_rsp)) {
+			fprintf(stderr, "unpack write rsp error\n");
+			return -1;
+		}
+
+		printf("%*.s\n", 4, write_rsp.hdr.proto);
+		printf("%u\n", write_rsp.hdr.op);
+		printf("%d\n", write_rsp.hdr.status);
 	}
 
 	fclose(file);
