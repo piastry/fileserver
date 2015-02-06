@@ -15,6 +15,7 @@
 #include <string.h>
 #include <endian.h>
 #include <fcntl.h>
+#include <openssl/md5.h>
 #include <msgpack.h>
 
 #include "proto.h"
@@ -144,11 +145,18 @@ process_write(msgpack_unpacker *pac, struct sfp_hdr *hdr,
 	char *buf;
 	size_t size;
 	int rc;
+	unsigned char md5[MD5_DIGEST_LENGTH];
 
 	memcpy(&write_req.hdr, hdr, sizeof(struct sfp_hdr));
 	rc = sfp_unpack_write_req(pac, &write_req);
 	if (rc)
 		return rc;
+
+	MD5(write_req.buf, write_req.len, md5);
+	if (memcmp(write_req.md5, md5, MD5_DIGEST_LENGTH)) {
+		fprintf(stderr, "MD5 checksum mismatches");
+		return -1;
+	}
 
 	if (write_req.fd == client->file_fd)
 		rc = write(write_req.fd, write_req.buf, write_req.len);
