@@ -269,7 +269,7 @@ sfp_pack_write_req(msgpack_packer *pk, const int fd, const uint64_t len,
 	rc = sfp_pack_hdr(pk, SFP_OP_WRITE, 0);
 	if (rc)
 		return rc;
-	rc = msgpack_pack_uint8(pk, fd);
+	rc = msgpack_pack_uint32(pk, fd);
 	if (rc)
 		return rc;
 	rc = msgpack_pack_uint64(pk, len);
@@ -289,7 +289,6 @@ sfp_pack_write_req(msgpack_packer *pk, const int fd, const uint64_t len,
 	if (rc)
 		return rc;
 	return msgpack_pack_raw_body(pk, buf, len);
-
 }
 
 int
@@ -308,7 +307,7 @@ sfp_unpack_write_req(msgpack_unpacker *pac, struct sfp_write_req *write_req)
 	printf("\n");
 	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
 		return unpacked_destroy_and_exit(&msg, -1);
-	write_req->fd = (uint8_t)root.via.u64;
+	write_req->fd = (uint32_t)root.via.u64;
 
 	/* unpack length */
 	if (!msgpack_unpacker_next(pac, &msg))
