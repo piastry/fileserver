@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <endian.h>
+#include <libgen.h>
 #include <msgpack.h>
 
 #include "proto.h"
@@ -23,6 +24,8 @@ main(int argc, char **argv)
 	char buf[CHUNK_SIZE+1];
 	size_t len;
 	char *msg;
+	struct sfp_open_rsp open_rsp;
+	msgpack_unpacker pac;
 
 	if (argc < 2) {
 		fprintf(stderr, "specify filename\n");
@@ -63,6 +66,44 @@ main(int argc, char **argv)
 
 	free(msg);
 
+	if (recv(sock, &len, 4, 0) <= 0) {
+		perror("open rsp length");
+		return -1;
+	}
+
+	len = be32toh(len);
+//	printf("going to receive %zu bytes\n", len);
+
+	if (len > CHUNK_SIZE) {
+		fprintf(stderr, "error: buffer is to big\n");
+		return -1;
+	}
+
+	if (recv(sock, buf, len, 0) <= 0) {
+		perror("open rsp");
+		return -1;
+	}
+
+	msgpack_unpacker_init(&pac, MSGPACK_UNPACKER_INIT_BUFFER_SIZE);
+	msgpack_unpacker_reserve_buffer(&pac, len);
+	memcpy(msgpack_unpacker_buffer(&pac), buf, len);
+	msgpack_unpacker_buffer_consumed(&pac, len);
+
+	if (sfp_unpack_hdr(&pac, &open_rsp.hdr)) {
+		fprintf(stderr, "unpack hdr error\n");
+		return -1;
+	}
+
+	if (sfp_unpack_open_rsp(&pac, &open_rsp)) {
+		fprintf(stderr, "unpack hdr error\n");
+		return -1;
+	}
+/*
+	printf("%*.s\n", 4, open_rsp.hdr.proto);
+	printf("%u\n", open_rsp.hdr.op);
+	printf("%d\n", open_rsp.hdr.status);
+	printf("%u\n", open_rsp.fd);
+*/
 	while ((len = fread(buf, 1, CHUNK_SIZE, file)) > 0) {
 		buf[len] = '\0';
 		printf("%zu %s\n", len, buf);
