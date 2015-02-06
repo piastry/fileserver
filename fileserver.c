@@ -122,13 +122,64 @@ unpack_hdr(msgpack_unpacker *pac, struct sfp_hdr *hdr)
 		return unpacked_destroy_and_exit(&msg, -1);
 	hdr->status = (uint32_t)root.via.u64;
 
-	msgpack_unpacked_destroy(&msg);
-	return 0;
+	return unpacked_destroy_and_exit(&msg, 0);
+}
+
+static int
+unpack_open_req(msgpack_unpacker *pac, struct sfp_open_req *open_req)
+{
+	msgpack_unpacked msg;
+	msgpack_object root;
+
+	msgpack_unpacked_init(&msg);
+
+	/* unpack open mode */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return unpacked_destroy_and_exit(&msg, -1);
+	root = msg.data;
+	msgpack_object_print(stdout, root);
+	printf("\n");
+	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+		return unpacked_destroy_and_exit(&msg, -1);
+	open_req->mode = (uint8_t)root.via.u64;
+
+	/* unpack filename */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return unpacked_destroy_and_exit(&msg, -1);
+	root = msg.data;
+	msgpack_object_print(stdout, root);
+	printf("\n");
+	if (root.type != MSGPACK_OBJECT_RAW)
+		return unpacked_destroy_and_exit(&msg, -1);
+	open_req->filename = malloc(root.via.raw.size);
+	if (!open_req->filename)
+		return unpacked_destroy_and_exit(&msg, -1);
+	memcpy(open_req->filename, root.via.raw.ptr, root.via.raw.size);
+	open_req->fnlen = root.via.raw.size;
+
+	return unpacked_destroy_and_exit(&msg, 0);
+}
+
+/* parse an open request and send a response */
+static int
+process_open(msgpack_unpacker *pac, struct sfp_hdr *hdr,
+	     struct evbuffer *output)
+{
+	struct sfp_open_req open_req;
+	int rc;
+
+	memcpy(&open_req.hdr, hdr, sizeof(struct sfp_hdr));
+	rc = unpack_open_req(pac, &open_req);
+	if (rc)
+		return rc;
+
+	/* BB construct response */
+	return rc;
 }
 
 /* we have the entire message - unpack it and process */
 static int
-process_message(struct client *client)
+process_message(struct client *client, struct evbuffer *output)
 {
 	struct sfp_hdr hdr;
 	msgpack_unpacker pac;
@@ -147,6 +198,7 @@ process_message(struct client *client)
 
 	switch (hdr.op) {
 	case SFP_OP_OPEN:
+		rc = process_open(&pac, &hdr, output);
 		break;
 	case SFP_OP_READ:
 		break;
@@ -211,7 +263,6 @@ process_state_ab(struct evbuffer *input, struct client *client)
 	if (client->remaining_size == 0) {
 		/* got full msg */
 		client->state = STATE_GOT_MSG;
-		return process_message(client);
 	}
 	return 0;
 }
@@ -234,7 +285,7 @@ readcb(struct bufferevent *bev, void *ctx)
 	int rc = 0;
 
 	input = bufferevent_get_input(bev);
-//	output = bufferevent_get_output(bev);
+	output = bufferevent_get_output(bev);
 
 	log("readcb from %zu thread\n", client->worker->tid);
 
@@ -245,6 +296,8 @@ readcb(struct bufferevent *bev, void *ctx)
 			break;
 		case STATE_ALLOC_BUF:
 			rc = process_state_ab(input, client);
+			if (!rc && client->state == STATE_GOT_MSG)
+				rc = process_message(client, output);
 			break;
 		case STATE_GOT_MSG:
 			discard_remaining(input);

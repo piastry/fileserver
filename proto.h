@@ -18,9 +18,9 @@ struct sfp_hdr {
 
 struct sfp_open_req {
 	struct sfp_hdr hdr;
-	uint8_t  mode;
+	uint8_t mode;
 	uint32_t fnlen;
-	char     filename[0];
+	char *filename;
 };
 
 /* SFP open modes */
