@@ -13,7 +13,7 @@
 #include "proto.h"
 
 #define FILESERVER_PORT 1113
-#define CHUNK_SIZE 65536
+#define PACKED_WSIZE 40
 
 static int
 get_bytes(int sock, void *buf, size_t len)
@@ -37,7 +37,7 @@ main(int argc, char **argv)
 	int sock;
 	struct sockaddr_in server;
 	FILE *file;
-	char buf[CHUNK_SIZE+1];
+	char buf[SFP_DATA_SIZE - PACKED_WSIZE];
 	size_t len, off, msg_size;
 	char *msg;
 	struct sfp_open_rsp open_rsp;
@@ -92,7 +92,7 @@ main(int argc, char **argv)
 	len = be32toh(len);
 //	printf("going to receive %zu bytes\n", len);
 
-	if (len > CHUNK_SIZE) {
+	if (len > SFP_DATA_SIZE) {
 		fprintf(stderr, "error: buffer is to big\n");
 		return -1;
 	}
@@ -128,7 +128,7 @@ main(int argc, char **argv)
 	}
 
 	off = 0;
-	while ((len = fread(buf, 1, CHUNK_SIZE, file)) > 0) {
+	while ((len = fread(buf, 1, SFP_DATA_SIZE - PACKED_WSIZE, file)) > 0) {
 		msgpack_unpacker_destroy(&pac);
 		msgpack_unpacker_init(&pac, MSGPACK_UNPACKER_INIT_BUFFER_SIZE);
 
@@ -154,7 +154,7 @@ main(int argc, char **argv)
 
 		len = be32toh(len);
 
-		if (len > CHUNK_SIZE) {
+		if (len > SFP_DATA_SIZE) {
 			fprintf(stderr, "error: buffer is to big\n");
 			return -1;
 		}

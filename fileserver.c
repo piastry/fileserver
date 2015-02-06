@@ -20,8 +20,6 @@
 #include "proto.h"
 
 #define FILESERVER_PORT 1113
-#define MAX_LINE 65536
-#define MIN_LINE 4
 #define THREAD_DISPATCH_TIMEOUT 1000
 
 #define NUM_THREADS 3
@@ -216,21 +214,23 @@ process_state_new(struct evbuffer *input, struct client *client)
 	size_t len = evbuffer_get_length(input);
 	uint32_t req_len_be32;
 
-	if (len < MIN_LINE) {
-		fprintf(stderr, "evbuffer lenght less than %u\n", MIN_LINE);
+	if (len < SFP_HEADER_SIZE) {
+		fprintf(stderr, "evbuffer lenght less than %u\n",
+			SFP_HEADER_SIZE);
 		return -1;
 	}
 
-	len = evbuffer_remove(input, &req_len_be32, MIN_LINE);
-	if (len != MIN_LINE) {
-		fprintf(stderr, "can't read %u bytes from the buffer\n", MIN_LINE);
+	len = evbuffer_remove(input, &req_len_be32, SFP_HEADER_SIZE);
+	if (len != SFP_HEADER_SIZE) {
+		fprintf(stderr, "can't read %u bytes from the buffer\n",
+			SFP_HEADER_SIZE);
 		return -1;
 	}
 
 	client->buf_size = be32toh(req_len_be32);
 	log("buf_size=%zu\n", client->buf_size);
-	if (client->buf_size > MAX_LINE) {
-		fprintf(stderr, "too big request\n");
+	if (client->buf_size > SFP_DATA_SIZE) {
+		fprintf(stderr, "too big request %zu\n", client->buf_size);
 		return -1;
 	}
 
@@ -372,7 +372,7 @@ do_accept(evutil_socket_t listener, short event, void *arg)
 			return;
 		}
 		bufferevent_setcb(bev, readcb, NULL, errorcb, client);
-		bufferevent_setwatermark(bev, EV_READ, MIN_LINE, MAX_LINE);
+		bufferevent_setwatermark(bev, EV_READ, SFP_HEADER_SIZE, SFP_DATA_SIZE);
 		bufferevent_enable(bev, EV_READ | EV_WRITE);
 		log("setup bufferevent to thread %zu\n", workers[to_thread].tid);
 		to_thread = (to_thread + 1) % (NUM_THREADS-1);

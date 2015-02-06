@@ -8,6 +8,9 @@
 #include <msgpack.h>
 #include <openssl/md5.h>
 
+#define SFP_HEADER_SIZE 4
+#define SFP_DATA_SIZE 65532
+
 struct sfp_hdr {
 	char proto[4];
 	int32_t status;
