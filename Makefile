@@ -1,6 +1,6 @@
 CC=gcc
-SRV_LDFLAGS=-levent -levent_pthreads -lpthread -lmsgpack
-CLI_LDFLAGS=-lmsgpack
+SRV_LDFLAGS=-levent -levent_pthreads -lpthread -lmsgpack -lcrypto
+CLI_LDFLAGS=-lmsgpack -lcrypto
 
 all: fileserver push
 

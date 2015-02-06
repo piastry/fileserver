@@ -258,3 +258,204 @@ sfp_create_open_rsp(const int fd, size_t *size)
 	msgpack_sbuffer_free(buffer);
 	return output;
 }
+
+int
+sfp_pack_write_req(msgpack_packer *pk, const int fd, const uint64_t len,
+		   const uint64_t off, const char *buf)
+{
+	int rc;
+	unsigned char md5[MD5_DIGEST_LENGTH];
+
+	rc = sfp_pack_hdr(pk, SFP_OP_WRITE, 0);
+	if (rc)
+		return rc;
+	rc = msgpack_pack_uint8(pk, fd);
+	if (rc)
+		return rc;
+	rc = msgpack_pack_uint64(pk, len);
+	if (rc)
+		return rc;
+	rc = msgpack_pack_uint64(pk, off);
+	if (rc)
+		return rc;
+	MD5(buf, len, md5);
+	rc = msgpack_pack_raw(pk, MD5_DIGEST_LENGTH);
+	if (rc)
+		return rc;
+	rc = msgpack_pack_raw_body(pk, md5, MD5_DIGEST_LENGTH);
+	if (rc)
+		return rc;
+	rc = msgpack_pack_raw(pk, len);
+	if (rc)
+		return rc;
+	return msgpack_pack_raw_body(pk, buf, len);
+
+}
+
+int
+sfp_unpack_write_req(msgpack_unpacker *pac, struct sfp_write_req *write_req)
+{
+	msgpack_unpacked msg;
+	msgpack_object root;
+
+	msgpack_unpacked_init(&msg);
+
+	/* unpack fd */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return unpacked_destroy_and_exit(&msg, -1);
+	root = msg.data;
+	msgpack_object_print(stdout, root);
+	printf("\n");
+	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+		return unpacked_destroy_and_exit(&msg, -1);
+	write_req->fd = (uint8_t)root.via.u64;
+
+	/* unpack length */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return unpacked_destroy_and_exit(&msg, -1);
+	root = msg.data;
+	msgpack_object_print(stdout, root);
+	printf("\n");
+	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+		return unpacked_destroy_and_exit(&msg, -1);
+	write_req->len = (uint64_t)root.via.u64;
+
+	/* unpack offset */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return unpacked_destroy_and_exit(&msg, -1);
+	root = msg.data;
+	msgpack_object_print(stdout, root);
+	printf("\n");
+	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+		return unpacked_destroy_and_exit(&msg, -1);
+	write_req->off = (uint64_t)root.via.u64;
+
+	/* unpack MD5 */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return unpacked_destroy_and_exit(&msg, -1);
+	root = msg.data;
+	msgpack_object_print(stdout, root);
+	printf("\n");
+	if (root.type != MSGPACK_OBJECT_RAW ||
+	    root.via.raw.size != MD5_DIGEST_LENGTH)
+		return unpacked_destroy_and_exit(&msg, -1);
+	memcpy(write_req->md5, root.via.raw.ptr, root.via.raw.size);
+
+	/* unpack data */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return unpacked_destroy_and_exit(&msg, -1);
+	root = msg.data;
+	msgpack_object_print(stdout, root);
+	printf("\n");
+	if (root.type != MSGPACK_OBJECT_RAW ||
+	    root.via.raw.size != write_req->len)
+		return unpacked_destroy_and_exit(&msg, -1);
+	write_req->buf = malloc(root.via.raw.size);
+	if (!write_req->buf)
+		return unpacked_destroy_and_exit(&msg, -1);
+	memcpy(write_req->buf, root.via.raw.ptr, root.via.raw.size);
+
+	return unpacked_destroy_and_exit(&msg, 0);
+}
+
+int
+sfp_pack_write_rsp(msgpack_packer *pk, const int32_t status)
+{
+	return sfp_pack_hdr(pk, SFP_OP_WRITE, status);
+}
+
+int
+sfp_unpack_write_rsp(msgpack_unpacker *pac, struct sfp_write_rsp *write_rsp)
+{
+	/* Nothing to do here */
+	return 0;
+}
+
+char *
+sfp_create_write_req(const int fd, const char *buf, const size_t len,
+		     const size_t off, size_t *size)
+{
+	msgpack_sbuffer *buffer;
+	msgpack_packer *pk;
+	char *output;
+	uint32_t *req_len;
+	int rc;
+
+	buffer = msgpack_sbuffer_new();
+	if (!buffer)
+		return NULL;
+
+	pk = msgpack_packer_new(buffer, msgpack_sbuffer_write);
+	if (!pk) {
+		msgpack_sbuffer_free(buffer);
+		return NULL;
+	}
+
+	if (sfp_pack_write_req(pk, fd, len, off, buf)) {
+		msgpack_packer_free(pk);
+		msgpack_sbuffer_free(buffer);
+		return NULL;
+	}
+
+	output = malloc(buffer->size + 4);
+	if (!output) {
+		msgpack_packer_free(pk);
+		msgpack_sbuffer_free(buffer);
+		return NULL;
+	}
+
+	memcpy(output + 4, buffer->data, buffer->size);
+
+	/* store message length as be32*/
+	req_len = (uint32_t *)output;
+	*req_len = htobe32(buffer->size);
+
+	*size = buffer->size + 4;
+	msgpack_packer_free(pk);
+	msgpack_sbuffer_free(buffer);
+	return output;
+}
+
+char *
+sfp_create_write_rsp(const int res, size_t *size)
+{
+	msgpack_sbuffer *buffer;
+	msgpack_packer *pk;
+	char *output;
+	uint32_t *rsp_len;
+	int rc;
+
+	buffer = msgpack_sbuffer_new();
+	if (!buffer)
+		return NULL;
+
+	pk = msgpack_packer_new(buffer, msgpack_sbuffer_write);
+	if (!pk) {
+		msgpack_sbuffer_free(buffer);
+		return NULL;
+	}
+
+	if (sfp_pack_write_rsp(pk, res >= 0 ? 0 : res)) {
+		msgpack_packer_free(pk);
+		msgpack_sbuffer_free(buffer);
+		return NULL;
+	}
+
+	output = malloc(buffer->size + 4);
+	if (!output) {
+		msgpack_packer_free(pk);
+		msgpack_sbuffer_free(buffer);
+		return NULL;
+	}
+
+	memcpy(output + 4, buffer->data, buffer->size);
+
+	/* store message length as be32*/
+	rsp_len = (uint32_t *)output;
+	*rsp_len = htobe32(buffer->size);
+
+	*size = buffer->size + 4;
+	msgpack_packer_free(pk);
+	msgpack_sbuffer_free(buffer);
+	return output;
+}

@@ -84,7 +84,7 @@ open_lock_file(struct sfp_open_req *open_req)
 	else if (open_req->mode == SFP_OMODE_WRITE)
 		mode |= O_WRONLY | O_TRUNC | O_CREAT;
 
-	fd = open(open_req->filename, mode);
+	fd = open(open_req->filename, mode, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (fd < 0) {
 		perror("open file");
 		return fd;
@@ -95,10 +95,19 @@ open_lock_file(struct sfp_open_req *open_req)
 	return fd;
 }
 
+static void
+clear_client_buf(struct client *client)
+{
+	free(client->buf);
+	client->buf = client->cur = NULL;
+	client->state = STATE_NEW;
+	client->buf_size = client->remaining_size = 0;
+}
+
 /* parse an open request and send a response */
 static int
 process_open(msgpack_unpacker *pac, struct sfp_hdr *hdr,
-	     struct evbuffer *output)
+	     struct evbuffer *output, struct client *client)
 {
 	struct sfp_open_req open_req;
 	int rc, fd;
@@ -111,12 +120,54 @@ process_open(msgpack_unpacker *pac, struct sfp_hdr *hdr,
 		return rc;
 
 	fd = open_lock_file(&open_req);
+	if (fd >= 0)
+		client->file_fd = fd;
+
+	log("open file %s, mode=%d: fid=%d\n", open_req.filename, open_req.mode, fd);
+
 	buf = sfp_create_open_rsp(fd, &size);
-	if (buf)
+	if (buf) {
+		log("send open resp\n");
 		evbuffer_add(output, buf, size);
+	}
 
 	free(buf);
 	free(open_req.filename);
+	clear_client_buf(client);
+	return rc;
+}
+
+/* parse a write request and send a response */
+static int
+process_write(msgpack_unpacker *pac, struct sfp_hdr *hdr,
+	     struct evbuffer *output, struct client *client)
+{
+	struct sfp_write_req write_req;
+	char *buf;
+	size_t size;
+	int rc;
+
+	memcpy(&write_req.hdr, hdr, sizeof(struct sfp_hdr));
+	rc = sfp_unpack_write_req(pac, &write_req);
+	if (rc)
+		return rc;
+
+	if (write_req.fd == client->file_fd)
+		rc = write(write_req.fd, write_req.buf, write_req.len);
+	else
+		rc = -ESTALE;
+
+	log("write file client_fd=%d, write_fd=%d, return %d\n", client->file_fd, write_req.fd, rc);
+
+	buf = sfp_create_write_rsp(rc, &size);
+	if (buf) {
+		log("send write resp\n");
+		evbuffer_add(output, buf, size);
+	}
+	rc = 0;
+
+	free(buf);
+	clear_client_buf(client);
 	return rc;
 }
 
@@ -142,11 +193,12 @@ process_message(struct client *client, struct evbuffer *output)
 
 	switch (hdr.op) {
 	case SFP_OP_OPEN:
-		rc = process_open(&pac, &hdr, output);
+		rc = process_open(&pac, &hdr, output, client);
 		break;
 	case SFP_OP_READ:
 		break;
 	case SFP_OP_WRITE:
+		rc = process_write(&pac, &hdr, output, client);
 		break;
 	case SFP_OP_CLOSE:
 		break;
@@ -255,6 +307,8 @@ readcb(struct bufferevent *bev, void *ctx)
 		fprintf(stderr, "freeing client\n");
 		bufferevent_free(bev);
 		free(client->buf);
+		if (client->file_fd != -1)
+			close(client->file_fd);
 		free(client);
 	}
 //	evbuffer_add(output, "\n", 1);
