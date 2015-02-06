@@ -73,20 +73,34 @@ client_init(struct worker *worker)
 	return client;
 }
 
+static int
+open_lock_file(struct sfp_open_req *open_req)
+{
+	return -1;
+}
+
 /* parse an open request and send a response */
 static int
 process_open(msgpack_unpacker *pac, struct sfp_hdr *hdr,
 	     struct evbuffer *output)
 {
 	struct sfp_open_req open_req;
-	int rc;
+	int rc, fd;
+	char *buf = NULL;
+	size_t size;
 
 	memcpy(&open_req.hdr, hdr, sizeof(struct sfp_hdr));
 	rc = sfp_unpack_open_req(pac, &open_req);
 	if (rc)
 		return rc;
 
-	/* BB construct response */
+	fd = open_lock_file(&open_req);
+	buf = sfp_create_open_rsp(fd, &size);
+	if (buf)
+		evbuffer_add(output, buf, size);
+
+	free(buf);
+	free(open_req.filename);
 	return rc;
 }
 
@@ -105,6 +119,7 @@ process_message(struct client *client, struct evbuffer *output)
 
 	rc = sfp_unpack_hdr(&pac, &hdr);
 	if (rc) {
+		log("unpack hdr error\n");
 		msgpack_unpacker_destroy(&pac);
 		return rc;
 	}
