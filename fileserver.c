@@ -238,7 +238,8 @@ readcb(struct bufferevent *bev, void *ctx)
 	if (rc) {
 		fprintf(stderr, "freeing client\n");
 		bufferevent_free(bev);
-		free(ctx);
+		free(client->buf);
+		free(client);
 	}
 //	evbuffer_add(output, "\n", 1);
 }
