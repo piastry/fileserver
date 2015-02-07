@@ -8,11 +8,16 @@
 #include <msgpack.h>
 #include <openssl/md5.h>
 
+
+#ifdef DEBUG
 #define sfp_log(format,args...) \
 	do { \
 		if (DEBUG) \
 			printf(format, ## args); \
 	} while(0)
+#else
+#define sfp_log(format,args...) {}
+#endif
 
 #define SFP_HEADER_SIZE 4
 #define SFP_DATA_SIZE 65532

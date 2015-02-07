@@ -15,6 +15,8 @@
 #define FILESERVER_PORT 1113
 #define PACKED_WSIZE 40
 
+#define DEBUG 1
+
 static int
 get_bytes(int sock, void *buf, size_t len)
 {
@@ -80,7 +82,6 @@ main(int argc, char **argv)
 
 	strncpy(filename, argv[1], len);
 	filename[len] = '\0';
-	printf("%s\n", filename);
 
 	msg = sfp_create_open_req(basename(filename), SFP_OMODE_WRITE, &len);
 	if (!msg) {
@@ -104,7 +105,6 @@ main(int argc, char **argv)
 	}
 
 	len = be32toh(len);
-//	printf("going to receive %zu bytes\n", len);
 
 	if (len > SFP_DATA_SIZE) {
 		fprintf(stderr, "error: buffer is to big\n");
@@ -131,10 +131,10 @@ main(int argc, char **argv)
 		return -1;
 	}
 
-	printf("%*.s\n", 4, open_rsp.hdr.proto);
-	printf("%u\n", open_rsp.hdr.op);
-	printf("%d\n", open_rsp.hdr.status);
-	printf("%u\n", open_rsp.fd);
+	sfp_log("%*.s\n", 4, open_rsp.hdr.proto);
+	sfp_log("%u\n", open_rsp.hdr.op);
+	sfp_log("%d\n", open_rsp.hdr.status);
+	sfp_log("%u\n", open_rsp.fd);
 
 	if (open_rsp.hdr.status != 0) {
 		fprintf(stderr, "server can't open file\n");
@@ -192,9 +192,9 @@ main(int argc, char **argv)
 			return -1;
 		}
 
-		printf("%*.s\n", 4, write_rsp.hdr.proto);
-		printf("%u\n", write_rsp.hdr.op);
-		printf("%d\n", write_rsp.hdr.status);
+		sfp_log("%*.s\n", 4, write_rsp.hdr.proto);
+		sfp_log("%u\n", write_rsp.hdr.op);
+		sfp_log("%d\n", write_rsp.hdr.status);
 	}
 
 	fclose(file);

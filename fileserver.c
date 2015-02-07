@@ -536,10 +536,10 @@ main(void)
 
 //	pid = fork();
 //	if (pid) {
-//		printf("parent process\n");
+//		sfp_log("parent process\n");
 //		return 0;
 //	}
 
-	printf("child process\n");
+//	sfp_log("child process\n");
 	return fileserver();
 }
