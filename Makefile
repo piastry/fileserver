@@ -2,12 +2,15 @@ CC=gcc
 SRV_LDFLAGS=-levent -levent_pthreads -lpthread -lmsgpack -lcrypto
 CLI_LDFLAGS=-lmsgpack -lcrypto
 
-all: fileserver push
+all: fileserver push pull
 
 fileserver: fileserver.c proto.o
 	$(CC) $< proto.o -o $@ $(SRV_LDFLAGS)
 
 push: push.c proto.o
+	$(CC) $< proto.o -o $@ $(CLI_LDFLAGS)
+
+pull: pull.c proto.o
 	$(CC) $< proto.o -o $@ $(CLI_LDFLAGS)
 
 proto.o: proto.c
