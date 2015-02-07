@@ -67,10 +67,9 @@ char * sfp_create_open_req(char *filename, uint8_t mode, size_t *size);
 int sfp_pack_open_rsp(msgpack_packer *pk, void *data);
 int sfp_unpack_open_rsp(msgpack_unpacker *pac, struct sfp_open_rsp *open_rsp);
 char * sfp_create_open_rsp(const int fd, size_t *size);
-int sfp_pack_write_req(msgpack_packer *pk, const int fd, const uint64_t len,
-		       const uint64_t off, const char *buf);
+int sfp_pack_write_req(msgpack_packer *pk, void *data);
 int sfp_unpack_write_req(msgpack_unpacker *pac, struct sfp_write_req *write_req);
-char * sfp_create_write_req(const int fd, const char *buf, const size_t len,
+char * sfp_create_write_req(const int fd, char *buf, const size_t len,
 			    const size_t off, size_t *size);
 int sfp_pack_write_rsp(msgpack_packer *pk, const int32_t status);
 int sfp_unpack_write_rsp(msgpack_unpacker *pac, struct sfp_write_rsp *write_rsp);

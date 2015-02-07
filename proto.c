@@ -227,35 +227,35 @@ sfp_create_open_rsp(const int fd, size_t *size)
 }
 
 int
-sfp_pack_write_req(msgpack_packer *pk, const int fd, const uint64_t len,
-		   const uint64_t off, const char *buf)
+sfp_pack_write_req(msgpack_packer *pk, void *data)
 {
 	int rc;
+	struct sfp_write_req *write_req = (struct sfp_write_req *)data;
 	unsigned char md5[MD5_DIGEST_LENGTH];
 
 	rc = sfp_pack_hdr(pk, SFP_OP_WRITE, 0);
 	if (rc)
 		return rc;
-	rc = msgpack_pack_uint32(pk, fd);
+	rc = msgpack_pack_uint32(pk, write_req->fd);
 	if (rc)
 		return rc;
-	rc = msgpack_pack_uint64(pk, len);
+	rc = msgpack_pack_uint64(pk, write_req->len);
 	if (rc)
 		return rc;
-	rc = msgpack_pack_uint64(pk, off);
+	rc = msgpack_pack_uint64(pk, write_req->off);
 	if (rc)
 		return rc;
-	MD5(buf, len, md5);
+	MD5(write_req->buf, write_req->len, md5);
 	rc = msgpack_pack_raw(pk, MD5_DIGEST_LENGTH);
 	if (rc)
 		return rc;
 	rc = msgpack_pack_raw_body(pk, md5, MD5_DIGEST_LENGTH);
 	if (rc)
 		return rc;
-	rc = msgpack_pack_raw(pk, len);
+	rc = msgpack_pack_raw(pk, write_req->len);
 	if (rc)
 		return rc;
-	return msgpack_pack_raw_body(pk, buf, len);
+	return msgpack_pack_raw_body(pk, write_req->buf, write_req->len);
 }
 
 int
@@ -338,48 +338,17 @@ sfp_unpack_write_rsp(msgpack_unpacker *pac, struct sfp_write_rsp *write_rsp)
 }
 
 char *
-sfp_create_write_req(const int fd, const char *buf, const size_t len,
+sfp_create_write_req(const int fd, char *buf, const size_t len,
 		     const size_t off, size_t *size)
 {
-	msgpack_sbuffer *buffer;
-	msgpack_packer *pk;
-	char *output;
-	uint32_t *req_len;
-	int rc;
+	struct sfp_write_req write_req;
 
-	buffer = msgpack_sbuffer_new();
-	if (!buffer)
-		return NULL;
+	write_req.fd = fd;
+	write_req.buf = buf;
+	write_req.len = len;
+	write_req.off = off;
 
-	pk = msgpack_packer_new(buffer, msgpack_sbuffer_write);
-	if (!pk) {
-		msgpack_sbuffer_free(buffer);
-		return NULL;
-	}
-
-	if (sfp_pack_write_req(pk, fd, len, off, buf)) {
-		msgpack_packer_free(pk);
-		msgpack_sbuffer_free(buffer);
-		return NULL;
-	}
-
-	output = malloc(buffer->size + 4);
-	if (!output) {
-		msgpack_packer_free(pk);
-		msgpack_sbuffer_free(buffer);
-		return NULL;
-	}
-
-	memcpy(output + 4, buffer->data, buffer->size);
-
-	/* store message length as be32*/
-	req_len = (uint32_t *)output;
-	*req_len = htobe32(buffer->size);
-
-	*size = buffer->size + 4;
-	msgpack_packer_free(pk);
-	msgpack_sbuffer_free(buffer);
-	return output;
+	return create_message(&write_req, sfp_pack_write_req, size);
 }
 
 char *
