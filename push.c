@@ -31,12 +31,23 @@ get_bytes(int sock, void *buf, size_t len)
 	return bytes;
 }
 
+#define errprint_and_clean(sock,file,format,args...) \
+	do { \
+		if (sock >= 0) \
+			close(sock); \
+		if (file) \
+			fclose(file); \
+		fprintf(stderr, "error: "); \
+		fprintf(stderr, format, ## args); \
+		fprintf(stderr, "\n"); \
+	} while(0)
+
 int
 main(int argc, char **argv)
 {
-	int sock;
+	int sock = -1;
 	struct sockaddr_in server;
-	FILE *file;
+	FILE *file = NULL;
 	char buf[SFP_DATA_SIZE - PACKED_WSIZE];
 	size_t len, off, msg_size;
 	char *msg, *filename;
@@ -45,21 +56,21 @@ main(int argc, char **argv)
 	msgpack_unpacker pac;
 	int rc;
 
-	if (argc < 2) {
-		fprintf(stderr, "specify filename\n");
-		return -1;
+	if (argc != 2) {
+		fprintf(stderr, "Usage: push\n");
+		exit(EXIT_FAILURE);
 	}
 
 	file = fopen(argv[1], "r");
 	if (!file) {
 		fprintf(stderr, "can't open file\n");
-		return -1;
+		exit(EXIT_FAILURE);
 	}
 
 	sock = socket(AF_INET, SOCK_STREAM, 0);
 	if (sock < 0) {
-		perror("socket");
-		return -1;
+		errprint_and_clean(sock, file, "can't create socket");
+		exit(EXIT_FAILURE);
 	}
 
 	server.sin_addr.s_addr = inet_addr("127.0.0.1");
@@ -67,15 +78,15 @@ main(int argc, char **argv)
 	server.sin_port = htons(FILESERVER_PORT);
 
 	if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
-		perror("connect");
-		return -1;
+		errprint_and_clean(sock, file, "can't connect to the remote server");
+		exit(EXIT_FAILURE);
 	}
 
 	len = strlen(argv[1]);
 	filename = malloc(len + 1);
 	if (!filename) {
-		perror("malloc");
-		return -1;
+		errprint_and_clean(sock, file, "out of memory");
+		exit(EXIT_FAILURE);
 	}
 
 	strncpy(filename, argv[1], len);
@@ -83,40 +94,41 @@ main(int argc, char **argv)
 
 	msg = sfp_create_open_req(basename(filename), SFP_OMODE_WRITE, &len);
 	if (!msg) {
-		perror("malloc");
 		free(filename);
-		return -1;
+		errprint_and_clean(sock, file, "can't create open req");
+		exit(EXIT_FAILURE);
 	}
 
 	free(filename);
 
 	if (send(sock, msg, len, 0) <= 0) {
-		perror("open req");
-		return -1;
+		free(msg);
+		errprint_and_clean(sock, file, "can't send open req");
+		exit(EXIT_FAILURE);
 	}
 
 	free(msg);
 
 	if (get_bytes(sock, &len, 4) <= 0) {
-		perror("open rsp length");
-		return -1;
+		errprint_and_clean(sock, file, "wrong open rsp length");
+		exit(EXIT_FAILURE);
 	}
 
 	len = be32toh(len);
 
 	if (len > SFP_DATA_SIZE) {
-		fprintf(stderr, "error: buffer is to big\n");
-		return -1;
+		errprint_and_clean(sock, file, "received buffer is to big");
+		exit(EXIT_FAILURE);
 	}
 
 	if (get_bytes(sock, buf, len) <= 0) {
-		perror("open rsp");
-		return -1;
+		errprint_and_clean(sock, file, "can't receive open rsp");
+		exit(EXIT_FAILURE);
 	}
 
 	if (sfp_parse_open_rsp(buf, len, &open_rsp)) {
-		fprintf(stderr, "error: parse open rsp\n");
-		return -1;
+		errprint_and_clean(sock, file, "can't parse open rsp");
+		exit(EXIT_FAILURE);
 	}
 
 	sfp_log("%*.s\n", 4, open_rsp.hdr.proto);
@@ -125,8 +137,8 @@ main(int argc, char **argv)
 	sfp_log("%u\n", open_rsp.fd);
 
 	if (open_rsp.hdr.status != 0) {
-		fprintf(stderr, "server can't open file\n");
-		return -1;
+		errprint_and_clean(sock, file, "server can't open file");
+		exit(EXIT_FAILURE);
 	}
 
 	off = 0;
@@ -135,38 +147,39 @@ main(int argc, char **argv)
 		msg = sfp_create_write_req(open_rsp.fd, buf, len, off,
 					   &msg_size);
 		if (!msg) {
-			perror("malloc write req");
-			return -1;
+			errprint_and_clean(sock, file, "can't create write req");
+			exit(EXIT_FAILURE);
 		}
 
 		if (send(sock, msg, msg_size, 0) <= 0) {
-			perror("write req send");
-			return -1;
+			free(msg);
+			errprint_and_clean(sock, file, "can't send write req");
+			exit(EXIT_FAILURE);
 		}
 
 		free(msg);
 		off += len;
 
 		if ((rc = get_bytes(sock, &len, 4)) <= 0) {
-			fprintf(stderr, "write rsp length error %d\n", rc);
-			return -1;
+			errprint_and_clean(sock, file, "wrong write rsp length");
+			exit(EXIT_FAILURE);
 		}
 
 		len = be32toh(len);
 
 		if (len > SFP_DATA_SIZE) {
-			fprintf(stderr, "error: buffer is to big\n");
-			return -1;
+			errprint_and_clean(sock, file, "received buffer is to big");
+			exit(EXIT_FAILURE);
 		}
 
 		if (recv(sock, buf, len, 0) <= 0) {
-			perror("write rsp");
-			return -1;
+			errprint_and_clean(sock, file, "can't receive write rsp");
+			exit(EXIT_FAILURE);
 		}
 
 		if (sfp_parse_write_rsp(buf, len, &write_rsp)) {
-			fprintf(stderr, "error: parse write rsp\n");
-			return -1;
+			errprint_and_clean(sock, file, "can't parse write rsp");
+			exit(EXIT_FAILURE);
 		}
 
 		sfp_log("%*.s\n", 4, write_rsp.hdr.proto);
@@ -174,7 +187,7 @@ main(int argc, char **argv)
 		sfp_log("%d\n", write_rsp.hdr.status);
 	}
 
-	fclose(file);
 	close(sock);
-	return 0;
+	fclose(file);
+	exit(EXIT_SUCCESS);
 }
