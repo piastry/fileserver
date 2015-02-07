@@ -15,8 +15,6 @@
 #define FILESERVER_PORT 1113
 #define PACKED_WSIZE 40
 
-#define DEBUG 1
-
 static int
 get_bytes(int sock, void *buf, size_t len)
 {

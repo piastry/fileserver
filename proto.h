@@ -2,12 +2,13 @@
  * The description of the Simple File Protocol.
  */
 
+#define DEBUG 1
+
 #include <linux/types.h>
 #include <string.h>
 #include <endian.h>
 #include <msgpack.h>
 #include <openssl/md5.h>
-
 
 #ifdef DEBUG
 #define sfp_log(format,args...) \

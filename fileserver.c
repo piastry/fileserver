@@ -25,8 +25,6 @@
 
 #define NUM_THREADS 3
 
-#define DEBUG 1
-
 struct worker {
 	pthread_t tid;
 	struct event_base *base;
