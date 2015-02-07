@@ -551,17 +551,49 @@ fileserver(const char *path, const int port)
 	return EXIT_SUCCESS;
 }
 
+static inline int
+isdir(const char *path)
+{
+	struct stat st;
+
+	if (!stat(path, &st) && (st.st_mode & S_IFDIR))
+		return 1;
+	return 0;
+}
+
 int
 main(int argc, char **argv)
 {
 	pid_t pid;
-	char *path = "./";
+	char *path = "./", *tofree = NULL;
 	int port = FILESERVER_PORT;
+	int rc;
+	size_t len;
 
-	if (argc != 1) {
-		fprintf(stderr, "Usage: fileserver\n");
+	if (argc < 1 || argc > 3) {
+		fprintf(stderr, "Usage: fileserver [DIR [PORT]]\n");
 		exit(EXIT_FAILURE);
 	}
+
+	if (argc > 1) {
+		if (!isdir(argv[1])) {
+			fprintf(stderr, "error: %s is not a directory\n", argv[1]);
+			exit(EXIT_FAILURE);
+		}
+		len = strlen(argv[1]);
+		path = malloc(len + 2);
+		if (!path) {
+			perror("malloc path");
+			exit(EXIT_FAILURE);
+		}
+		tofree = path;
+		memcpy(path, argv[1], len);
+		path[len] = '/';
+		path[len + 1] = '\0';
+	}
+
+	if (argc > 2)
+		port = atoi(argv[2]);
 
 //	pid = fork();
 //	if (pid) {
@@ -570,5 +602,7 @@ main(int argc, char **argv)
 //	}
 
 //	sfp_log("child process\n");
-	exit(fileserver(path, port));
+	rc = fileserver(path, port);
+	free(tofree);
+	exit(rc);
 }
