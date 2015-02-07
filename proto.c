@@ -72,21 +72,22 @@ sfp_unpack_hdr(msgpack_unpacker *pac, struct sfp_hdr *hdr)
 }
 
 int
-sfp_pack_open_req(msgpack_packer *pk, const char *filename, uint8_t mode)
+sfp_pack_open_req(msgpack_packer *pk, void *data)
 {
 	int rc;
-	size_t len = strlen(filename);
+	struct sfp_open_req *open_req = (struct sfp_open_req *)data;
+	size_t len = strlen(open_req->filename);
 
 	rc = sfp_pack_hdr(pk, SFP_OP_OPEN, 0);
 	if (rc)
 		return rc;
-	rc = msgpack_pack_uint8(pk, mode);
+	rc = msgpack_pack_uint8(pk, open_req->mode);
 	if (rc)
 		return rc;
 	rc = msgpack_pack_raw(pk, len);
 	if (rc)
 		return rc;
-	return msgpack_pack_raw_body(pk, filename, len);
+	return msgpack_pack_raw_body(pk, open_req->filename, len);
 }
 
 int
@@ -157,13 +158,14 @@ sfp_unpack_open_rsp(msgpack_unpacker *pac, struct sfp_open_rsp *open_rsp)
 	return unpacked_destroy_and_exit(&msg, 0);
 }
 
-char *
-sfp_create_open_req(const char *filename, uint8_t mode, size_t *size)
+static char *
+create_message(void *data, int (*pack_data)(msgpack_packer *, void *),
+	       size_t *size)
 {
 	msgpack_sbuffer *buffer;
 	msgpack_packer *pk;
 	char *output;
-	uint32_t *req_len;
+	uint32_t *len;
 	int rc;
 
 	buffer = msgpack_sbuffer_new();
@@ -176,7 +178,7 @@ sfp_create_open_req(const char *filename, uint8_t mode, size_t *size)
 		return NULL;
 	}
 
-	if (sfp_pack_open_req(pk, filename, mode)) {
+	if (pack_data(pk, data)) {
 		msgpack_packer_free(pk);
 		msgpack_sbuffer_free(buffer);
 		return NULL;
@@ -192,13 +194,24 @@ sfp_create_open_req(const char *filename, uint8_t mode, size_t *size)
 	memcpy(output + 4, buffer->data, buffer->size);
 
 	/* store message length as be32*/
-	req_len = (uint32_t *)output;
-	*req_len = htobe32(buffer->size);
+	len = (uint32_t *)output;
+	*len = htobe32(buffer->size);
 
 	*size = buffer->size + 4;
 	msgpack_packer_free(pk);
 	msgpack_sbuffer_free(buffer);
 	return output;
+}
+
+char *
+sfp_create_open_req(char *filename, uint8_t mode, size_t *size)
+{
+	struct sfp_open_req open_req;
+
+	open_req.filename = filename;
+	open_req.mode = mode;
+
+	return create_message(&open_req, sfp_pack_open_req, size);
 }
 
 char *
