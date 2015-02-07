@@ -77,8 +77,10 @@ int sfp_pack_open_req(msgpack_packer *pk, void *data);
 int sfp_unpack_open_req(msgpack_unpacker *pac, struct sfp_open_req *open_req);
 char * sfp_create_open_req(char *filename, uint8_t mode, size_t *size);
 int sfp_pack_open_rsp(msgpack_packer *pk, void *data);
-int sfp_unpack_open_rsp(msgpack_unpacker *pac, struct sfp_open_rsp *open_rsp);
+int sfp_unpack_open_rsp(msgpack_unpacker *pac, void *data);
 char * sfp_create_open_rsp(const int fd, size_t *size);
+int sfp_parse_open_rsp(const char *buf, const size_t size,
+		       struct sfp_open_rsp *open_rsp);
 int sfp_pack_write_req(msgpack_packer *pk, void *data);
 int sfp_unpack_write_req(msgpack_unpacker *pac, struct sfp_write_req *write_req);
 char * sfp_create_write_req(const int fd, char *buf, const size_t len,

@@ -114,18 +114,8 @@ main(int argc, char **argv)
 		return -1;
 	}
 
-	msgpack_unpacker_init(&pac, MSGPACK_UNPACKER_INIT_BUFFER_SIZE);
-	msgpack_unpacker_reserve_buffer(&pac, len);
-	memcpy(msgpack_unpacker_buffer(&pac), buf, len);
-	msgpack_unpacker_buffer_consumed(&pac, len);
-
-	if (sfp_unpack_hdr(&pac, &open_rsp.hdr)) {
-		fprintf(stderr, "unpack hdr error\n");
-		return -1;
-	}
-
-	if (sfp_unpack_open_rsp(&pac, &open_rsp)) {
-		fprintf(stderr, "unpack open rsp error\n");
+	if (sfp_parse_open_rsp(buf, len, &open_rsp)) {
+		fprintf(stderr, "error: parse open rsp\n");
 		return -1;
 	}
 
@@ -141,8 +131,6 @@ main(int argc, char **argv)
 
 	off = 0;
 	while ((len = fread(buf, 1, SFP_DATA_SIZE - PACKED_WSIZE, file)) > 0) {
-		msgpack_unpacker_destroy(&pac);
-		msgpack_unpacker_init(&pac, MSGPACK_UNPACKER_INIT_BUFFER_SIZE);
 
 		msg = sfp_create_write_req(open_rsp.fd, buf, len, off,
 					   &msg_size);
@@ -176,19 +164,24 @@ main(int argc, char **argv)
 			return -1;
 		}
 
+		msgpack_unpacker_init(&pac, MSGPACK_UNPACKER_INIT_BUFFER_SIZE);
 		msgpack_unpacker_reserve_buffer(&pac, len);
 		memcpy(msgpack_unpacker_buffer(&pac), buf, len);
 		msgpack_unpacker_buffer_consumed(&pac, len);
 
 		if (sfp_unpack_hdr(&pac, &write_rsp.hdr)) {
+			msgpack_unpacker_destroy(&pac);
 			fprintf(stderr, "unpack hdr error\n");
 			return -1;
 		}
 
 		if (sfp_unpack_write_rsp(&pac, &write_rsp)) {
+			msgpack_unpacker_destroy(&pac);
 			fprintf(stderr, "unpack write rsp error\n");
 			return -1;
 		}
+
+		msgpack_unpacker_destroy(&pac);
 
 		sfp_log("%*.s\n", 4, write_rsp.hdr.proto);
 		sfp_log("%u\n", write_rsp.hdr.op);

@@ -142,10 +142,11 @@ sfp_pack_open_rsp(msgpack_packer *pk, void *data)
 }
 
 int
-sfp_unpack_open_rsp(msgpack_unpacker *pac, struct sfp_open_rsp *open_rsp)
+sfp_unpack_open_rsp(msgpack_unpacker *pac, void *data)
 {
 	msgpack_unpacked msg;
 	msgpack_object root;
+	struct sfp_open_rsp *open_rsp = (struct sfp_open_rsp *)data;
 
 	msgpack_unpacked_init(&msg);
 
@@ -204,6 +205,45 @@ create_message(void *data, int (*pack_data)(msgpack_packer *, void *),
 	msgpack_packer_free(pk);
 	msgpack_sbuffer_free(buffer);
 	return output;
+}
+
+static int
+parse_message(const char *buf, const size_t size, const int cmd, void *data,
+	      int (*unpack_msg)(msgpack_unpacker *, void *data))
+{
+	msgpack_unpacker pac;
+	struct sfp_hdr *hdr = (struct sfp_hdr *)data;
+
+	msgpack_unpacker_init(&pac, MSGPACK_UNPACKER_INIT_BUFFER_SIZE);
+	msgpack_unpacker_reserve_buffer(&pac, size);
+	memcpy(msgpack_unpacker_buffer(&pac), buf, size);
+	msgpack_unpacker_buffer_consumed(&pac, size);
+
+	if (sfp_unpack_hdr(&pac, hdr)) {
+		msgpack_unpacker_destroy(&pac);
+		return -1;
+	}
+
+	if (hdr->op != cmd) {
+		msgpack_unpacker_destroy(&pac);
+		return -1;
+	}
+
+	if (unpack_msg(&pac, hdr)) {
+		msgpack_unpacker_destroy(&pac);
+		return -1;
+	}
+
+	msgpack_unpacker_destroy(&pac);
+	return 0;
+}
+
+int
+sfp_parse_open_rsp(const char *buf, const size_t size,
+		   struct sfp_open_rsp *open_rsp)
+{
+	return parse_message(buf, size, SFP_OP_OPEN, open_rsp,
+			     sfp_unpack_open_rsp);
 }
 
 char *
