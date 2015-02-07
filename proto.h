@@ -86,5 +86,7 @@ int sfp_unpack_write_req(msgpack_unpacker *pac, struct sfp_write_req *write_req)
 char * sfp_create_write_req(const int fd, char *buf, const size_t len,
 			    const size_t off, size_t *size);
 int sfp_pack_write_rsp(msgpack_packer *pk, void *data);
-int sfp_unpack_write_rsp(msgpack_unpacker *pac, struct sfp_write_rsp *write_rsp);
+int sfp_unpack_write_rsp(msgpack_unpacker *pac, void *data);
 char * sfp_create_write_rsp(const int res, size_t *size);
+int sfp_parse_write_rsp(const char *buf, const size_t size,
+			struct sfp_write_rsp *write_rsp);

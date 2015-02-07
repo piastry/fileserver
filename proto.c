@@ -369,7 +369,7 @@ sfp_pack_write_rsp(msgpack_packer *pk, void *data)
 }
 
 int
-sfp_unpack_write_rsp(msgpack_unpacker *pac, struct sfp_write_rsp *write_rsp)
+sfp_unpack_write_rsp(msgpack_unpacker *pac, void *data)
 {
 	/* Nothing to do here */
 	return 0;
@@ -397,4 +397,12 @@ sfp_create_write_rsp(const int res, size_t *size)
 	write_rsp.hdr.status = res >= 0 ? 0 : res;
 
 	return create_message(&write_rsp, sfp_pack_write_rsp, size);
+}
+
+int
+sfp_parse_write_rsp(const char *buf, const size_t size,
+		    struct sfp_write_rsp *write_rsp)
+{
+	return parse_message(buf, size, SFP_OP_WRITE, write_rsp,
+			     sfp_unpack_write_rsp);
 }

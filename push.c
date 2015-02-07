@@ -164,24 +164,10 @@ main(int argc, char **argv)
 			return -1;
 		}
 
-		msgpack_unpacker_init(&pac, MSGPACK_UNPACKER_INIT_BUFFER_SIZE);
-		msgpack_unpacker_reserve_buffer(&pac, len);
-		memcpy(msgpack_unpacker_buffer(&pac), buf, len);
-		msgpack_unpacker_buffer_consumed(&pac, len);
-
-		if (sfp_unpack_hdr(&pac, &write_rsp.hdr)) {
-			msgpack_unpacker_destroy(&pac);
-			fprintf(stderr, "unpack hdr error\n");
+		if (sfp_parse_write_rsp(buf, len, &write_rsp)) {
+			fprintf(stderr, "error: parse write rsp\n");
 			return -1;
 		}
-
-		if (sfp_unpack_write_rsp(&pac, &write_rsp)) {
-			msgpack_unpacker_destroy(&pac);
-			fprintf(stderr, "unpack write rsp error\n");
-			return -1;
-		}
-
-		msgpack_unpacker_destroy(&pac);
 
 		sfp_log("%*.s\n", 4, write_rsp.hdr.proto);
 		sfp_log("%u\n", write_rsp.hdr.op);
