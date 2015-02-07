@@ -528,9 +528,14 @@ fileserver(void)
 }
 
 int
-main(void)
+main(int argc, char **argv)
 {
 	pid_t pid;
+
+	if (argc != 1) {
+		fprintf(stderr, "Usage: fileserver\n");
+		exit(EXIT_FAILURE);
+	}
 
 //	pid = fork();
 //	if (pid) {
