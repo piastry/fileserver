@@ -3,7 +3,6 @@
 #include <string.h>
 #include <endian.h>
 #include <msgpack.h>
-#include <libgen.h>
 
 #include "proto.h"
 
@@ -163,9 +162,7 @@ sfp_create_open_req(const char *filename, uint8_t mode, size_t *size)
 {
 	msgpack_sbuffer *buffer;
 	msgpack_packer *pk;
-	size_t len = strlen(filename);
 	char *output;
-	char *filename_copy;
 	uint32_t *req_len;
 	int rc;
 
@@ -179,24 +176,11 @@ sfp_create_open_req(const char *filename, uint8_t mode, size_t *size)
 		return NULL;
 	}
 
-	filename_copy = malloc(len+1);
-	if (!filename_copy) {
+	if (sfp_pack_open_req(pk, filename, mode)) {
 		msgpack_packer_free(pk);
 		msgpack_sbuffer_free(buffer);
 		return NULL;
 	}
-
-	strncpy(filename_copy, filename, len);
-	filename_copy[len] = '\0';
-
-	if (sfp_pack_open_req(pk, basename(filename_copy), mode)) {
-		free(filename_copy);
-		msgpack_packer_free(pk);
-		msgpack_sbuffer_free(buffer);
-		return NULL;
-	}
-
-	free(filename_copy);
 
 	output = malloc(buffer->size + 4);
 	if (!output) {

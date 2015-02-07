@@ -39,7 +39,7 @@ main(int argc, char **argv)
 	FILE *file;
 	char buf[SFP_DATA_SIZE - PACKED_WSIZE];
 	size_t len, off, msg_size;
-	char *msg;
+	char *msg, *filename;
 	struct sfp_open_rsp open_rsp;
 	struct sfp_write_rsp write_rsp;
 	msgpack_unpacker pac;
@@ -71,11 +71,25 @@ main(int argc, char **argv)
 		return -1;
 	}
 
-	msg = sfp_create_open_req(argv[1], SFP_OMODE_WRITE, &len);
-	if (!msg) {
+	len = strlen(argv[1]);
+	filename = malloc(len + 1);
+	if (!filename) {
 		perror("malloc");
 		return -1;
 	}
+
+	strncpy(filename, argv[1], len);
+	filename[len] = '\0';
+	printf("%s\n", filename);
+
+	msg = sfp_create_open_req(basename(filename), SFP_OMODE_WRITE, &len);
+	if (!msg) {
+		perror("malloc");
+		free(filename);
+		return -1;
+	}
+
+	free(filename);
 
 	if (send(sock, msg, len, 0) <= 0) {
 		perror("open req");
