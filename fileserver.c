@@ -26,8 +26,9 @@
 #define NUM_THREADS 3
 
 struct worker {
-	pthread_t tid;
 	struct event_base *base;
+	char *path;
+	pthread_t tid;
 };
 
 #define STATE_NEW  0
@@ -66,23 +67,38 @@ client_init(struct worker *worker)
 }
 
 static int
-open_lock_file(struct sfp_open_req *open_req)
+open_lock_file(struct sfp_open_req *open_req, const char *dir)
 {
 	int fd, mode = 0;
+	char *file_path;
+	size_t dir_path_len = strlen(dir);
+	size_t file_name_len = strlen(open_req->filename);
+	size_t path_len = dir_path_len + file_name_len;
+
+	file_path = malloc(path_len + 1);
+	if (!file_path) {
+		perror("open file malloc");
+		return EXIT_FAILURE;
+	}
+	memcpy(file_path, dir, dir_path_len);
+	memcpy(file_path + dir_path_len, open_req->filename, file_name_len);
+	file_path[path_len] = '\0';
 
 	if (open_req->mode == SFP_OMODE_READ)
 		mode |= O_RDONLY;
 	else if (open_req->mode == SFP_OMODE_WRITE)
 		mode |= O_WRONLY | O_TRUNC | O_CREAT;
 
-	fd = open(open_req->filename, mode, S_IRWXU | S_IRWXG | S_IRWXO);
+	fd = open(file_path, mode, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (fd < 0) {
+		free(file_path);
 		perror("open file");
 		return fd;
 	}
 
 	/* lock file */
 
+	free(file_path);
 	return fd;
 }
 
@@ -110,7 +126,7 @@ process_open(msgpack_unpacker *pac, struct sfp_hdr *hdr,
 	if (rc)
 		return rc;
 
-	fd = open_lock_file(&open_req);
+	fd = open_lock_file(&open_req, client->worker->path);
 	if (fd >= 0)
 		client->file_fd = fd;
 
@@ -411,12 +427,20 @@ worker_thread(void *arg)
 }
 
 static int
-thread_pool_create(void)
+thread_pool_create(const char *path)
 {
 	unsigned int i;
 	int rc = 0;
+	size_t len = strlen(path);
 
 	for (i = 0; i < NUM_THREADS-1; i++) {
+		workers[i].path = malloc(len + 1);
+		if (!workers[i].path) {
+			fprintf(stderr, "thread path malloc error\n");
+			return EXIT_FAILURE;
+		}
+		memcpy(workers[i].path, path, len);
+		workers[i].path[len] = '\0';
 		rc = pthread_create(&workers[i].tid, NULL, worker_thread, &workers[i]);
 		if (rc) {
 			fprintf(stderr, "thread create error %zu\n", workers[i].tid);
@@ -452,7 +476,7 @@ sighandler(int signal)
 }
 
 static int
-fileserver(void)
+fileserver(const char *path, const int port)
 {
 	evutil_socket_t listener;
 	struct sockaddr_in sin;
@@ -479,7 +503,7 @@ fileserver(void)
 
 	sin.sin_family = AF_INET;
 	sin.sin_addr.s_addr = htonl(INADDR_ANY);
-	sin.sin_port = htons(FILESERVER_PORT);
+	sin.sin_port = htons(port);
 
 	listener = socket(AF_INET, SOCK_STREAM, 0);
 	if (listener < 0) {
@@ -500,7 +524,7 @@ fileserver(void)
 		return EXIT_FAILURE;
 	}
 
-	if (thread_pool_create())
+	if (thread_pool_create(path))
 		return EXIT_FAILURE;
 
 	listener_event = event_new(base, listener, EV_READ|EV_PERSIST, do_accept, (void*)base);
@@ -531,6 +555,8 @@ int
 main(int argc, char **argv)
 {
 	pid_t pid;
+	char *path = "./";
+	int port = FILESERVER_PORT;
 
 	if (argc != 1) {
 		fprintf(stderr, "Usage: fileserver\n");
@@ -544,5 +570,5 @@ main(int argc, char **argv)
 //	}
 
 //	sfp_log("child process\n");
-	exit(fileserver());
+	exit(fileserver(path, port));
 }
