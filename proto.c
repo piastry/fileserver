@@ -325,9 +325,10 @@ sfp_unpack_write_req(msgpack_unpacker *pac, struct sfp_write_req *write_req)
 }
 
 int
-sfp_pack_write_rsp(msgpack_packer *pk, const int32_t status)
+sfp_pack_write_rsp(msgpack_packer *pk, void *data)
 {
-	return sfp_pack_hdr(pk, SFP_OP_WRITE, status);
+	return sfp_pack_hdr(pk, SFP_OP_WRITE,
+			    ((struct sfp_write_rsp *)data)->hdr.status);
 }
 
 int
@@ -354,43 +355,9 @@ sfp_create_write_req(const int fd, char *buf, const size_t len,
 char *
 sfp_create_write_rsp(const int res, size_t *size)
 {
-	msgpack_sbuffer *buffer;
-	msgpack_packer *pk;
-	char *output;
-	uint32_t *rsp_len;
-	int rc;
+	struct sfp_write_rsp write_rsp;
 
-	buffer = msgpack_sbuffer_new();
-	if (!buffer)
-		return NULL;
+	write_rsp.hdr.status = res >= 0 ? 0 : res;
 
-	pk = msgpack_packer_new(buffer, msgpack_sbuffer_write);
-	if (!pk) {
-		msgpack_sbuffer_free(buffer);
-		return NULL;
-	}
-
-	if (sfp_pack_write_rsp(pk, res >= 0 ? 0 : res)) {
-		msgpack_packer_free(pk);
-		msgpack_sbuffer_free(buffer);
-		return NULL;
-	}
-
-	output = malloc(buffer->size + 4);
-	if (!output) {
-		msgpack_packer_free(pk);
-		msgpack_sbuffer_free(buffer);
-		return NULL;
-	}
-
-	memcpy(output + 4, buffer->data, buffer->size);
-
-	/* store message length as be32*/
-	rsp_len = (uint32_t *)output;
-	*rsp_len = htobe32(buffer->size);
-
-	*size = buffer->size + 4;
-	msgpack_packer_free(pk);
-	msgpack_sbuffer_free(buffer);
-	return output;
+	return create_message(&write_rsp, sfp_pack_write_rsp, size);
 }
