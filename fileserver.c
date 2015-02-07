@@ -474,7 +474,7 @@ fileserver(void)
 	base = event_base_new();
 	if (!base) {
 		perror("event new");
-		return 1;
+		return EXIT_FAILURE;
 	}
 
 	sin.sin_family = AF_INET;
@@ -484,7 +484,7 @@ fileserver(void)
 	listener = socket(AF_INET, SOCK_STREAM, 0);
 	if (listener < 0) {
 		perror("socket");
-		return 1;
+		return EXIT_FAILURE;
 	}
 
 	evthread_make_base_notifiable(base);
@@ -492,22 +492,22 @@ fileserver(void)
 
 	if (bind(listener, (struct sockaddr*)&sin, sizeof(sin)) < 0) {
 		perror("bind");
-		return 1;
+		return EXIT_FAILURE;
 	}
 
 	if (listen(listener, SOMAXCONN) < 0) {
 		perror("listen");
-		return 1;
+		return EXIT_FAILURE;
 	}
 
 	if (thread_pool_create())
-		return 1;
+		return EXIT_FAILURE;
 
 	listener_event = event_new(base, listener, EV_READ|EV_PERSIST, do_accept, (void*)base);
 
 	if (!listener_event) {
 		perror("event new");
-		return 1;
+		return EXIT_FAILURE;
 	}
 
 	event_add(listener_event, NULL);
@@ -524,7 +524,7 @@ fileserver(void)
 	thread_pool_shutdown();
 
 	sfp_log("fileserver stopped\n");
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 int
@@ -539,5 +539,5 @@ main(void)
 //	}
 
 //	sfp_log("child process\n");
-	return fileserver();
+	exit(fileserver());
 }
