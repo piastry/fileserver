@@ -54,12 +54,21 @@ main(int argc, char **argv)
 	struct sfp_open_rsp open_rsp;
 	struct sfp_write_rsp write_rsp;
 	msgpack_unpacker pac;
+	char def_ip[] = "127.0.0.1";
+	char *ip = def_ip;
+	int port = FILESERVER_PORT;
 	int rc;
 
-	if (argc != 2) {
-		fprintf(stderr, "Usage: push\n");
+	if (argc < 2 || argc > 4) {
+		fprintf(stderr, "Usage: push FILENAME [IP [PORT]]\n");
 		exit(EXIT_FAILURE);
 	}
+
+	if (argc > 2)
+		ip = argv[2];
+
+	if (argc > 3)
+		port = atoi(argv[3]);
 
 	file = fopen(argv[1], "r");
 	if (!file) {
@@ -73,9 +82,9 @@ main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	server.sin_addr.s_addr = inet_addr("127.0.0.1");
+	server.sin_addr.s_addr = inet_addr(ip);
 	server.sin_family = AF_INET;
-	server.sin_port = htons(FILESERVER_PORT);
+	server.sin_port = htons(port);
 
 	if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
 		errprint_and_clean(sock, file, "can't connect to the remote server");
