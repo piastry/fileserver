@@ -64,6 +64,20 @@ struct sfp_write_rsp {
 	struct sfp_hdr hdr;
 };
 
+struct sfp_read_req {
+	struct sfp_hdr hdr;
+	uint32_t fd;
+	uint64_t len;
+	uint64_t off;
+};
+
+struct sfp_read_rsp {
+	struct sfp_hdr hdr;
+	uint64_t len;
+	char md5[MD5_DIGEST_LENGTH];
+	unsigned char *buf;
+};
+
 static int inline
 unpacked_destroy_and_exit(msgpack_unpacked *msg, int rc)
 {
@@ -73,20 +87,36 @@ unpacked_destroy_and_exit(msgpack_unpacked *msg, int rc)
 
 int sfp_pack_hdr(msgpack_packer *pk, uint8_t op, int32_t status);
 int sfp_unpack_hdr(msgpack_unpacker *pac, struct sfp_hdr *hdr);
+
 int sfp_pack_open_req(msgpack_packer *pk, void *data);
 int sfp_unpack_open_req(msgpack_unpacker *pac, struct sfp_open_req *open_req);
 char * sfp_create_open_req(char *filename, uint8_t mode, size_t *size);
+
 int sfp_pack_open_rsp(msgpack_packer *pk, void *data);
 int sfp_unpack_open_rsp(msgpack_unpacker *pac, void *data);
 char * sfp_create_open_rsp(const int fd, size_t *size);
 int sfp_parse_open_rsp(const char *buf, const size_t size,
 		       struct sfp_open_rsp *open_rsp);
+
 int sfp_pack_write_req(msgpack_packer *pk, void *data);
 int sfp_unpack_write_req(msgpack_unpacker *pac, struct sfp_write_req *write_req);
 char * sfp_create_write_req(const int fd, char *buf, const size_t len,
 			    const size_t off, size_t *size);
+
 int sfp_pack_write_rsp(msgpack_packer *pk, void *data);
 int sfp_unpack_write_rsp(msgpack_unpacker *pac, void *data);
 char * sfp_create_write_rsp(const int res, size_t *size);
 int sfp_parse_write_rsp(const char *buf, const size_t size,
 			struct sfp_write_rsp *write_rsp);
+
+
+int sfp_pack_read_req(msgpack_packer *pk, void *data);
+int sfp_unpack_read_req(msgpack_unpacker *pac, struct sfp_read_req *read_req);
+char * sfp_create_read_req(const int fd, const size_t len,
+			   const size_t off, size_t *size);
+
+int sfp_pack_read_rsp(msgpack_packer *pk, void *data);
+int sfp_unpack_read_rsp(msgpack_unpacker *pac, void *data);
+char * sfp_create_read_rsp(const ssize_t res, char *buf, size_t *size);
+int sfp_parse_read_rsp(const char *buf, const size_t size,
+		       struct sfp_read_rsp *read_rsp);

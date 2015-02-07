@@ -406,3 +406,168 @@ sfp_parse_write_rsp(const char *buf, const size_t size,
 	return parse_message(buf, size, SFP_OP_WRITE, write_rsp,
 			     sfp_unpack_write_rsp);
 }
+
+int
+sfp_pack_read_req(msgpack_packer *pk, void *data)
+{
+	int rc;
+	struct sfp_read_req *read_req = (struct sfp_read_req *)data;
+
+	rc = sfp_pack_hdr(pk, SFP_OP_READ, 0);
+	if (rc)
+		return rc;
+	rc = msgpack_pack_uint32(pk, read_req->fd);
+	if (rc)
+		return rc;
+	rc = msgpack_pack_uint64(pk, read_req->len);
+	if (rc)
+		return rc;
+	return msgpack_pack_uint64(pk, read_req->off);
+}
+
+int
+sfp_unpack_read_req(msgpack_unpacker *pac, struct sfp_read_req *read_req)
+{
+	msgpack_unpacked msg;
+	msgpack_object root;
+
+	msgpack_unpacked_init(&msg);
+
+	/* unpack fd */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return unpacked_destroy_and_exit(&msg, -1);
+	root = msg.data;
+	msgpack_print(root);
+	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+		return unpacked_destroy_and_exit(&msg, -1);
+	read_req->fd = (uint32_t)root.via.u64;
+
+	/* unpack length */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return unpacked_destroy_and_exit(&msg, -1);
+	root = msg.data;
+	msgpack_print(root);
+	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+		return unpacked_destroy_and_exit(&msg, -1);
+	read_req->len = (uint64_t)root.via.u64;
+
+	/* unpack offset */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return unpacked_destroy_and_exit(&msg, -1);
+	root = msg.data;
+	msgpack_print(root);
+	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+		return unpacked_destroy_and_exit(&msg, -1);
+	read_req->off = (uint64_t)root.via.u64;
+
+	return unpacked_destroy_and_exit(&msg, 0);
+}
+
+int
+sfp_pack_read_rsp(msgpack_packer *pk, void *data)
+{
+	int rc;
+	struct sfp_read_rsp *read_rsp = (struct sfp_read_rsp *)data;
+	unsigned char md5[MD5_DIGEST_LENGTH];
+
+	rc = sfp_pack_hdr(pk, SFP_OP_READ, read_rsp->hdr.status);
+	if (rc)
+		return rc;
+	rc = msgpack_pack_uint64(pk, read_rsp->len);
+	if (rc)
+		return rc;
+	MD5(read_rsp->buf, read_rsp->len, md5);
+	rc = msgpack_pack_raw(pk, MD5_DIGEST_LENGTH);
+	if (rc)
+		return rc;
+	rc = msgpack_pack_raw_body(pk, md5, MD5_DIGEST_LENGTH);
+	if (rc)
+		return rc;
+	rc = msgpack_pack_raw(pk, read_rsp->len);
+	if (rc)
+		return rc;
+	return msgpack_pack_raw_body(pk, read_rsp->buf, read_rsp->len);
+}
+
+int
+sfp_unpack_read_rsp(msgpack_unpacker *pac, void *data)
+{
+	struct sfp_read_rsp *read_rsp = (struct sfp_read_rsp *)data;
+	msgpack_unpacked msg;
+	msgpack_object root;
+
+	msgpack_unpacked_init(&msg);
+
+	/* unpack length */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return unpacked_destroy_and_exit(&msg, -1);
+	root = msg.data;
+	msgpack_print(root);
+	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+		return unpacked_destroy_and_exit(&msg, -1);
+	read_rsp->len = (uint64_t)root.via.u64;
+
+	/* unpack MD5 */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return unpacked_destroy_and_exit(&msg, -1);
+	root = msg.data;
+	msgpack_print(root);
+	if (root.type != MSGPACK_OBJECT_RAW ||
+	    root.via.raw.size != MD5_DIGEST_LENGTH)
+		return unpacked_destroy_and_exit(&msg, -1);
+	memcpy(read_rsp->md5, root.via.raw.ptr, root.via.raw.size);
+
+	/* unpack data */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return unpacked_destroy_and_exit(&msg, -1);
+	root = msg.data;
+	msgpack_print(root);
+	if (root.type != MSGPACK_OBJECT_RAW ||
+	    root.via.raw.size != read_rsp->len)
+		return unpacked_destroy_and_exit(&msg, -1);
+	read_rsp->buf = malloc(root.via.raw.size);
+	if (!read_rsp->buf)
+		return unpacked_destroy_and_exit(&msg, -1);
+	memcpy(read_rsp->buf, root.via.raw.ptr, root.via.raw.size);
+
+	return unpacked_destroy_and_exit(&msg, 0);
+}
+
+char *
+sfp_create_read_req(const int fd, const size_t len,
+		    const size_t off, size_t *size)
+{
+	struct sfp_read_req read_req;
+
+	read_req.fd = fd;
+	read_req.len = len;
+	read_req.off = off;
+
+	return create_message(&read_req, sfp_pack_read_req, size);
+}
+
+char *
+sfp_create_read_rsp(const ssize_t res, char *buf, size_t *size)
+{
+	struct sfp_read_rsp read_rsp;
+	char tmpbuf[0];
+
+	read_rsp.hdr.status = res >= 0 ? 0 : res;
+	if (!read_rsp.hdr.status) {
+		read_rsp.buf = buf;
+		read_rsp.len = res;
+	} else {
+		read_rsp.len = 0;
+		read_rsp.buf = tmpbuf;
+	}
+
+	return create_message(&read_rsp, sfp_pack_read_rsp, size);
+}
+
+int
+sfp_parse_read_rsp(const char *buf, const size_t size,
+		   struct sfp_read_rsp *read_rsp)
+{
+	return parse_message(buf, size, SFP_OP_READ, read_rsp,
+			     sfp_unpack_read_rsp);
+}
