@@ -49,12 +49,6 @@ struct client {
 static struct worker workers[NUM_THREADS-1];
 static struct event_base *accept_base;
 
-#define log(format,args...) \
-	do { \
-		if (DEBUG) \
-			printf(format, ## args); \
-	} while(0)
-
 static struct client *
 client_init(struct worker *worker)
 {
@@ -122,11 +116,11 @@ process_open(msgpack_unpacker *pac, struct sfp_hdr *hdr,
 	if (fd >= 0)
 		client->file_fd = fd;
 
-	log("open file %s, mode=%d: fid=%d\n", open_req.filename, open_req.mode, fd);
+	sfp_log("open file %s, mode=%d: fid=%d\n", open_req.filename, open_req.mode, fd);
 
 	buf = sfp_create_open_rsp(fd, &size);
 	if (buf) {
-		log("send open resp\n");
+		sfp_log("send open resp %s\n", open_req.filename);
 		evbuffer_add(output, buf, size);
 	}
 
@@ -163,11 +157,11 @@ process_write(msgpack_unpacker *pac, struct sfp_hdr *hdr,
 	else
 		rc = -ESTALE;
 
-	log("write file client_fd=%d, write_fd=%d, return %d\n", client->file_fd, write_req.fd, rc);
+	sfp_log("write file client_fd=%d, write_fd=%d, return %d\n", client->file_fd, write_req.fd, rc);
 
 	buf = sfp_create_write_rsp(rc, &size);
 	if (buf) {
-		log("send write resp\n");
+		sfp_log("send write resp\n");
 		evbuffer_add(output, buf, size);
 	}
 	rc = 0;
@@ -192,7 +186,7 @@ process_message(struct client *client, struct evbuffer *output)
 
 	rc = sfp_unpack_hdr(&pac, &hdr);
 	if (rc) {
-		log("unpack hdr error\n");
+		sfp_log("unpack hdr error\n");
 		msgpack_unpacker_destroy(&pac);
 		return rc;
 	}
@@ -236,7 +230,7 @@ process_state_new(struct evbuffer *input, struct client *client)
 	}
 
 	client->buf_size = be32toh(req_len_be32);
-	log("buf_size=%zu\n", client->buf_size);
+	sfp_log("buf_size=%zu\n", client->buf_size);
 	if (client->buf_size > SFP_DATA_SIZE) {
 		fprintf(stderr, "too big request %zu\n", client->buf_size);
 		return -1;
@@ -260,7 +254,7 @@ process_state_ab(struct evbuffer *input, struct client *client)
 	size_t len = evbuffer_get_length(input);
 
 	len = evbuffer_remove(input, client->cur, client->remaining_size);
-	log("%.*s\n", (int)len, client->cur);
+	sfp_log("%.*s\n", (int)len, client->cur);
 	client->remaining_size -= len;
 	client->cur += len;
 
@@ -291,7 +285,7 @@ readcb(struct bufferevent *bev, void *ctx)
 	input = bufferevent_get_input(bev);
 	output = bufferevent_get_output(bev);
 
-	log("readcb from %zu thread size=%zu\n", client->worker->tid, evbuffer_get_length(input));
+	sfp_log("readcb from %zu thread size=%zu\n", client->worker->tid, evbuffer_get_length(input));
 
 	while (evbuffer_get_length(input) && !rc) {
 		switch (client->state) {
@@ -349,14 +343,14 @@ do_accept(evutil_socket_t listener, short event, void *arg)
 	socklen_t slen = sizeof(struct sockaddr_storage);
 	int fd;
 
-	log("got event\n");
+	sfp_log("got event\n");
 
 	fd = accept(listener, (struct sockaddr*)&ss, &slen);
-	log("accept\n");
+	sfp_log("accept\n");
 	if (fd < 0) {
-		fprintf(stderr, "accept error\n");
+		perror("accept return -1");
 	} else if (fd > FD_SETSIZE) {
-		log("close fd\n");
+		sfp_log("close fd\n");
 		close(fd);
 	} else {
 		struct bufferevent *bev;
@@ -382,7 +376,7 @@ do_accept(evutil_socket_t listener, short event, void *arg)
 		bufferevent_setcb(bev, readcb, NULL, errorcb, client);
 		bufferevent_setwatermark(bev, EV_READ, SFP_HEADER_SIZE, SFP_DATA_SIZE);
 		bufferevent_enable(bev, EV_READ | EV_WRITE);
-		log("setup bufferevent to thread %zu\n", workers[to_thread].tid);
+		sfp_log("setup bufferevent to thread %zu\n", workers[to_thread].tid);
 		to_thread = (to_thread + 1) % (NUM_THREADS-1);
 	}
 }
@@ -393,7 +387,7 @@ worker_thread(void *arg)
 	struct worker *w = (struct worker *)arg;
 	int rc = 0;
 
-	log("start thread %zu\n", w->tid);
+	sfp_log("start thread %zu\n", w->tid);
 
 	evthread_use_pthreads();
 	w->base = event_base_new();
@@ -406,14 +400,14 @@ worker_thread(void *arg)
 	evthread_make_base_notifiable(w->base);
 
 	while (event_base_dispatch(w->base) == 1) {
-	//	log("before sleep %zu\n", w->tid);
+	//	sfp_log("before sleep %zu\n", w->tid);
 		usleep(THREAD_DISPATCH_TIMEOUT);
-	//	log("after sleep %zu\n", w->tid);
+	//	sfp_log("after sleep %zu\n", w->tid);
 	}
 
 	event_base_free(w->base);
 
-	log("finish thread %zu\n", w->tid);
+	sfp_log("finish thread %zu\n", w->tid);
 	pthread_exit(&rc);
 	return NULL;
 }
@@ -521,7 +515,7 @@ fileserver(void)
 	event_add(listener_event, NULL);
 
 	accept_base = base;
-	log("fileserver started\n");
+	sfp_log("fileserver started\n");
 	event_base_dispatch(base);
 
 	accept_base = NULL;
@@ -531,7 +525,7 @@ fileserver(void)
 
 	thread_pool_shutdown();
 
-	log("fileserver stopped\n");
+	sfp_log("fileserver stopped\n");
 	return 0;
 }
 
