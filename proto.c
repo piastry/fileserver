@@ -6,6 +6,14 @@
 
 #include "proto.h"
 
+#define msgpack_print(object) \
+	do { \
+		if (DEBUG) {\
+			msgpack_object_print(stdout, object); \
+			printf("\n"); \
+		} \
+	} while (0);
+
 int
 sfp_pack_hdr(msgpack_packer *pk, uint8_t op, int32_t status)
 {
@@ -35,8 +43,7 @@ sfp_unpack_hdr(msgpack_unpacker *pac, struct sfp_hdr *hdr)
 	if (!msgpack_unpacker_next(pac, &msg))
 		return unpacked_destroy_and_exit(&msg, -1);
 	root = msg.data;
-	msgpack_object_print(stdout, root);
-	printf("\n");
+	msgpack_print(root);
 	if (root.type != MSGPACK_OBJECT_RAW)
 		return unpacked_destroy_and_exit(&msg, -1);
 	if (root.via.raw.size != 4)
@@ -49,8 +56,7 @@ sfp_unpack_hdr(msgpack_unpacker *pac, struct sfp_hdr *hdr)
 	if (!msgpack_unpacker_next(pac, &msg))
 		return unpacked_destroy_and_exit(&msg, -1);
 	root = msg.data;
-	msgpack_object_print(stdout, root);
-	printf("\n");
+	msgpack_print(root);
 	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
 		return unpacked_destroy_and_exit(&msg, -1);
 	hdr->op = (uint8_t)root.via.u64;
@@ -59,8 +65,7 @@ sfp_unpack_hdr(msgpack_unpacker *pac, struct sfp_hdr *hdr)
 	if (!msgpack_unpacker_next(pac, &msg))
 		return unpacked_destroy_and_exit(&msg, -1);
 	root = msg.data;
-	msgpack_object_print(stdout, root);
-	printf("\n");
+	msgpack_print(root);
 	if (root.type == MSGPACK_OBJECT_POSITIVE_INTEGER)
 		hdr->status = (uint32_t)root.via.u64;
 	else if (root.type == MSGPACK_OBJECT_NEGATIVE_INTEGER)
@@ -102,8 +107,7 @@ sfp_unpack_open_req(msgpack_unpacker *pac, struct sfp_open_req *open_req)
 	if (!msgpack_unpacker_next(pac, &msg))
 		return unpacked_destroy_and_exit(&msg, -1);
 	root = msg.data;
-	msgpack_object_print(stdout, root);
-	printf("\n");
+	msgpack_print(root);
 	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
 		return unpacked_destroy_and_exit(&msg, -1);
 	open_req->mode = (uint8_t)root.via.u64;
@@ -112,8 +116,7 @@ sfp_unpack_open_req(msgpack_unpacker *pac, struct sfp_open_req *open_req)
 	if (!msgpack_unpacker_next(pac, &msg))
 		return unpacked_destroy_and_exit(&msg, -1);
 	root = msg.data;
-	msgpack_object_print(stdout, root);
-	printf("\n");
+	msgpack_print(root);
 	if (root.type != MSGPACK_OBJECT_RAW)
 		return unpacked_destroy_and_exit(&msg, -1);
 	open_req->filename = malloc(root.via.raw.size + 1);
@@ -150,8 +153,7 @@ sfp_unpack_open_rsp(msgpack_unpacker *pac, struct sfp_open_rsp *open_rsp)
 	if (!msgpack_unpacker_next(pac, &msg))
 		return unpacked_destroy_and_exit(&msg, -1);
 	root = msg.data;
-	msgpack_object_print(stdout, root);
-	printf("\n");
+	msgpack_print(root);
 	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
 		return unpacked_destroy_and_exit(&msg, -1);
 	open_rsp->fd = (uint32_t)root.via.u64;
@@ -270,8 +272,7 @@ sfp_unpack_write_req(msgpack_unpacker *pac, struct sfp_write_req *write_req)
 	if (!msgpack_unpacker_next(pac, &msg))
 		return unpacked_destroy_and_exit(&msg, -1);
 	root = msg.data;
-	msgpack_object_print(stdout, root);
-	printf("\n");
+	msgpack_print(root);
 	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
 		return unpacked_destroy_and_exit(&msg, -1);
 	write_req->fd = (uint32_t)root.via.u64;
@@ -280,8 +281,7 @@ sfp_unpack_write_req(msgpack_unpacker *pac, struct sfp_write_req *write_req)
 	if (!msgpack_unpacker_next(pac, &msg))
 		return unpacked_destroy_and_exit(&msg, -1);
 	root = msg.data;
-	msgpack_object_print(stdout, root);
-	printf("\n");
+	msgpack_print(root);
 	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
 		return unpacked_destroy_and_exit(&msg, -1);
 	write_req->len = (uint64_t)root.via.u64;
@@ -290,8 +290,7 @@ sfp_unpack_write_req(msgpack_unpacker *pac, struct sfp_write_req *write_req)
 	if (!msgpack_unpacker_next(pac, &msg))
 		return unpacked_destroy_and_exit(&msg, -1);
 	root = msg.data;
-	msgpack_object_print(stdout, root);
-	printf("\n");
+	msgpack_print(root);
 	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
 		return unpacked_destroy_and_exit(&msg, -1);
 	write_req->off = (uint64_t)root.via.u64;
@@ -300,8 +299,7 @@ sfp_unpack_write_req(msgpack_unpacker *pac, struct sfp_write_req *write_req)
 	if (!msgpack_unpacker_next(pac, &msg))
 		return unpacked_destroy_and_exit(&msg, -1);
 	root = msg.data;
-	msgpack_object_print(stdout, root);
-	printf("\n");
+	msgpack_print(root);
 	if (root.type != MSGPACK_OBJECT_RAW ||
 	    root.via.raw.size != MD5_DIGEST_LENGTH)
 		return unpacked_destroy_and_exit(&msg, -1);
@@ -311,8 +309,7 @@ sfp_unpack_write_req(msgpack_unpacker *pac, struct sfp_write_req *write_req)
 	if (!msgpack_unpacker_next(pac, &msg))
 		return unpacked_destroy_and_exit(&msg, -1);
 	root = msg.data;
-	msgpack_object_print(stdout, root);
-	printf("\n");
+	msgpack_print(root);
 	if (root.type != MSGPACK_OBJECT_RAW ||
 	    root.via.raw.size != write_req->len)
 		return unpacked_destroy_and_exit(&msg, -1);
