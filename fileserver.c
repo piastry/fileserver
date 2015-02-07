@@ -185,6 +185,46 @@ process_write(msgpack_unpacker *pac, struct sfp_hdr *hdr,
 	return rc;
 }
 
+/* parse a read request and send a response */
+static int
+process_read(msgpack_unpacker *pac, struct sfp_hdr *hdr,
+	     struct evbuffer *output, struct client *client)
+{
+	struct sfp_read_req read_req;
+	char *buf, *data;
+	size_t size;
+	ssize_t rc;
+
+	memcpy(&read_req.hdr, hdr, sizeof(struct sfp_hdr));
+	rc = sfp_unpack_read_req(pac, &read_req);
+	if (rc)
+		return rc;
+
+	data = malloc(read_req.len);
+	if (!data) {
+		perror("malloc in process_read");
+		return -1;
+	}
+
+	if (read_req.fd == client->file_fd)
+		rc = read(read_req.fd, data, read_req.len);
+	else
+		rc = -ESTALE;
+
+	sfp_log("read file client_fd=%d, read_fd=%d, return %zd\n", client->file_fd, read_req.fd, rc);
+
+	buf = sfp_create_read_rsp(rc, data, &size);
+	if (buf) {
+		sfp_log("send read resp\n");
+		evbuffer_add(output, buf, size);
+	}
+	rc = 0;
+
+	free(buf);
+	clear_client_buf(client);
+	return rc;
+}
+
 /* we have the entire message - unpack it and process */
 static int
 process_message(struct client *client, struct evbuffer *output)
@@ -210,6 +250,7 @@ process_message(struct client *client, struct evbuffer *output)
 		rc = process_open(&pac, &hdr, output, client);
 		break;
 	case SFP_OP_READ:
+		rc = process_read(&pac, &hdr, output, client);
 		break;
 	case SFP_OP_WRITE:
 		rc = process_write(&pac, &hdr, output, client);
