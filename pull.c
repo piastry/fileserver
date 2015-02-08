@@ -42,6 +42,83 @@ get_bytes(int sock, void *buf, size_t len)
 		fprintf(stderr, "\n"); \
 	} while(0)
 
+static char *
+sfp_get_resp(const int sock, size_t *len)
+{
+	char *buf;
+
+	if (get_bytes(sock, len, 4) <= 0) {
+		fprintf(stderr, "wrong rsp length\n");
+		return NULL;
+	}
+
+	*len = be32toh(*len);
+
+	if (*len > SFP_DATA_SIZE) {
+		fprintf(stderr, "received buffer is too big\n");
+		return NULL;
+	}
+
+	buf = malloc(*len);
+	if (!buf) {
+		fprintf(stderr, "can't malloc buffer\n");
+		return NULL;
+	}
+
+	if (get_bytes(sock, buf, *len) <= 0) {
+		free(buf);
+		fprintf(stderr, "can't receive rsp\n");
+		return NULL;
+	}
+
+	return buf;
+}
+
+int
+sfp_open_file(const int sock, char *filename, const int flags,
+	      struct sfp_open_rsp *open_rsp)
+{
+	char *msg;
+	size_t msg_size;
+	char *buf;
+
+	msg = sfp_create_open_req(filename, flags, &msg_size);
+	if (!msg)
+		return -1;
+
+	if (send(sock, msg, msg_size, 0) <= 0) {
+		free(msg);
+		fprintf(stderr, "can't send open request\n");
+		return -1;
+	}
+
+	free(msg);
+
+	msg = sfp_get_resp(sock, &msg_size);
+	if (!msg)
+		return -1;
+
+	if (sfp_parse_open_rsp(msg, msg_size, open_rsp)) {
+		free(msg);
+		fprintf(stderr, "can't parse open rsp\n");
+		return -1;
+	}
+
+	free(msg);
+
+	sfp_log("%*.s\n", 4, open_rsp->hdr.proto);
+	sfp_log("%u\n", open_rsp->hdr.op);
+	sfp_log("%d\n", open_rsp->hdr.status);
+	sfp_log("%u\n", open_rsp->fd);
+
+	if (open_rsp->hdr.status != 0) {
+		fprintf(stderr, "server can't open file\n");
+		return -1;
+	}
+
+	return 0;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -102,54 +179,12 @@ main(int argc, char **argv)
 	strncpy(filename, argv[1], len);
 	filename[len] = '\0';
 
-	msg = sfp_create_open_req(basename(filename), SFP_OMODE_READ, &len);
-	if (!msg) {
-		free(filename);
-		errprint_and_clean(sock, file, "can't create open req");
+	if (sfp_open_file(sock, basename(filename), SFP_OMODE_READ, &open_rsp)) {
+		errprint_and_clean(sock, file, "can't process open file");
 		exit(EXIT_FAILURE);
 	}
 
 	free(filename);
-
-	if (send(sock, msg, len, 0) <= 0) {
-		free(msg);
-		errprint_and_clean(sock, file, "can't send open req");
-		exit(EXIT_FAILURE);
-	}
-
-	free(msg);
-
-	if (get_bytes(sock, &len, 4) <= 0) {
-		errprint_and_clean(sock, file, "wrong open rsp length");
-		exit(EXIT_FAILURE);
-	}
-
-	len = be32toh(len);
-
-	if (len > SFP_DATA_SIZE) {
-		errprint_and_clean(sock, file, "received buffer is too big");
-		exit(EXIT_FAILURE);
-	}
-
-	if (get_bytes(sock, buf, len) <= 0) {
-		errprint_and_clean(sock, file, "can't receive open rsp");
-		exit(EXIT_FAILURE);
-	}
-
-	if (sfp_parse_open_rsp(buf, len, &open_rsp)) {
-		errprint_and_clean(sock, file, "can't parse open rsp");
-		exit(EXIT_FAILURE);
-	}
-
-	sfp_log("%*.s\n", 4, open_rsp.hdr.proto);
-	sfp_log("%u\n", open_rsp.hdr.op);
-	sfp_log("%d\n", open_rsp.hdr.status);
-	sfp_log("%u\n", open_rsp.fd);
-
-	if (open_rsp.hdr.status != 0) {
-		errprint_and_clean(sock, file, "server can't open file");
-		exit(EXIT_FAILURE);
-	}
 
 	off = 0;
 	do {
