@@ -20,7 +20,6 @@
 
 #include "proto.h"
 
-#define FILESERVER_PORT 1113
 #define THREAD_DISPATCH_TIMEOUT 1000
 
 #define NUM_THREADS 3
@@ -656,7 +655,7 @@ main(int argc, char **argv)
 {
 	pid_t pid;
 	char *path = "./", *tofree = NULL;
-	int port = FILESERVER_PORT;
+	int port = SFP_SERVER_PORT;
 	int rc;
 	size_t len;
 

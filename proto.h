@@ -26,6 +26,8 @@
 #define SFP_HEADER_SIZE 4
 #define SFP_DATA_SIZE 65532
 
+#define SFP_SERVER_PORT 1115
+
 struct sfp_hdr {
 	char proto[4];
 	int32_t status;

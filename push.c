@@ -10,7 +10,6 @@
 
 #include "utils.h"
 
-#define FILESERVER_PORT 1113
 #define PACKED_WSIZE 40
 
 int
@@ -26,7 +25,7 @@ main(int argc, char **argv)
 	struct sfp_write_rsp write_rsp;
 	char def_ip[] = "127.0.0.1";
 	char *ip = def_ip;
-	int port = FILESERVER_PORT;
+	int port = SFP_SERVER_PORT;
 	int rc;
 
 	if (argc < 2 || argc > 4) {

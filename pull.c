@@ -26,7 +26,7 @@ main(int argc, char **argv)
 	struct sfp_read_rsp read_rsp;
 	char def_ip[] = "127.0.0.1";
 	char *ip = def_ip;
-	int port = FILESERVER_PORT;
+	int port = SFP_SERVER_PORT;
 	int rc;
 
 	if (argc < 2 || argc > 4) {
