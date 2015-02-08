@@ -22,7 +22,8 @@
 
 #define THREAD_DISPATCH_TIMEOUT 1000
 
-#define NUM_THREADS 3
+#define DEFAULT_NUM_THREADS 3
+#define MAX_THREADS 16
 
 struct worker {
 	struct event_base *base;
@@ -51,7 +52,8 @@ struct client {
 #define SFP_MD5_SUFFIX ".md5"
 #define SFP_MD5_SUFFIX_SIZE sizeof(SFP_MD5_SUFFIX)
 
-static struct worker workers[NUM_THREADS-1];
+static int num_threads = DEFAULT_NUM_THREADS;
+static struct worker workers[MAX_THREADS - 1];
 static struct event_base *accept_base;
 
 static struct client *
@@ -483,7 +485,7 @@ do_accept(evutil_socket_t listener, short event, void *arg)
 		bufferevent_setwatermark(bev, EV_READ, SFP_HEADER_SIZE, SFP_DATA_SIZE);
 		bufferevent_enable(bev, EV_READ | EV_WRITE);
 		sfp_log("setup bufferevent to thread %zu\n", workers[to_thread].tid);
-		to_thread = (to_thread + 1) % (NUM_THREADS-1);
+		to_thread = (to_thread + 1) % (num_threads-1);
 	}
 }
 
@@ -522,7 +524,7 @@ thread_pool_create(const char *path)
 	int rc = 0;
 	size_t len = strlen(path);
 
-	for (i = 0; i < NUM_THREADS-1; i++) {
+	for (i = 0; i < num_threads - 1; i++) {
 		workers[i].path = malloc(len + 1);
 		if (!workers[i].path) {
 			fprintf(stderr, "thread path malloc error\n");
@@ -545,7 +547,7 @@ thread_pool_shutdown(void)
 	unsigned int i;
 	int rc = 0, *retval;
 
-	for (i = 0; i < NUM_THREADS-1; i++) {
+	for (i = 0; i < num_threads - 1; i++) {
 		rc = event_base_loopexit(workers[i].base, NULL);
 		if (rc) {
 			fprintf(stderr, "thread shutting error %zu\n", workers[i].tid);
@@ -659,8 +661,8 @@ main(int argc, char **argv)
 	int rc;
 	size_t len;
 
-	if (argc < 1 || argc > 3) {
-		fprintf(stderr, "Usage: fileserver [DIR [PORT]]\n");
+	if (argc < 1 || argc > 4) {
+		fprintf(stderr, "Usage: fileserver [DIR [PORT [THREADS]]]\n");
 		exit(EXIT_FAILURE);
 	}
 
@@ -683,6 +685,14 @@ main(int argc, char **argv)
 
 	if (argc > 2)
 		port = atoi(argv[2]);
+
+	if (argc > 3) {
+		num_threads = atoi(argv[3]);
+		if (num_threads < 2 || num_threads > 16) {
+			fprintf(stderr, "error: wrong number of threads, use between 2 and 16\n");
+			exit(EXIT_FAILURE);
+		}
+	}
 
 //	pid = fork();
 //	if (pid) {
