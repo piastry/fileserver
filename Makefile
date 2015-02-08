@@ -20,4 +20,4 @@ proto.o: proto.c
 	$(CC) -c $< -o $@
 
 clean:
-	rm -rf *.o fileserver push
+	rm -rf *.o fileserver push pull
