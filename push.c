@@ -6,9 +6,7 @@
 #include <sys/socket.h>
 #include <fcntl.h>
 #include <string.h>
-#include <endian.h>
 #include <libgen.h>
-#include <msgpack.h>
 
 #include "utils.h"
 
@@ -22,11 +20,10 @@ main(int argc, char **argv)
 	struct sockaddr_in server;
 	FILE *file = NULL;
 	char buf[SFP_DATA_SIZE];
-	size_t len, off, msg_size;
-	char *msg, *filename;
+	size_t len, off;
+	char *filename;
 	struct sfp_open_rsp open_rsp;
 	struct sfp_write_rsp write_rsp;
-	msgpack_unpacker pac;
 	char def_ip[] = "127.0.0.1";
 	char *ip = def_ip;
 	int port = FILESERVER_PORT;
