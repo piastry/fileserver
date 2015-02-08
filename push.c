@@ -25,7 +25,7 @@ get_bytes(int sock, void *buf, size_t len)
 		if (rc <= 0)
 			return rc;
 		bytes += rc;
-		len -= bytes;
+		len -= rc;
 	}
 
 	return bytes;
@@ -181,7 +181,7 @@ main(int argc, char **argv)
 			exit(EXIT_FAILURE);
 		}
 
-		if (recv(sock, buf, len, 0) <= 0) {
+		if (get_bytes(sock, buf, len) <= 0) {
 			errprint_and_clean(sock, file, "can't receive write rsp");
 			exit(EXIT_FAILURE);
 		}
