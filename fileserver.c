@@ -37,6 +37,8 @@ struct worker {
 
 struct client {
 	struct worker *worker;
+	MD5_CTX md5handler;
+	unsigned char md5[MD5_DIGEST_LENGTH];
 	int file_fd;
 	int state;
 	char *buf;
@@ -127,8 +129,10 @@ process_open(msgpack_unpacker *pac, struct sfp_hdr *hdr,
 		return rc;
 
 	fd = open_lock_file(&open_req, client->worker->path);
-	if (fd >= 0)
+	if (fd >= 0) {
+		MD5_Init(&client->md5handler);
 		client->file_fd = fd;
+	}
 
 	sfp_log("open file %s, mode=%d: fid=%d\n", open_req.filename, open_req.mode, fd);
 
@@ -166,9 +170,10 @@ process_write(msgpack_unpacker *pac, struct sfp_hdr *hdr,
 		return -1;
 	}
 
-	if (write_req.fd == client->file_fd)
+	if (write_req.fd == client->file_fd) {
 		rc = write(write_req.fd, write_req.buf, write_req.len);
-	else
+		MD5_Update(&client->md5handler, write_req.buf, write_req.len);
+	} else
 		rc = -ESTALE;
 
 	sfp_log("write file client_fd=%d, write_fd=%d, return %zd\n", client->file_fd, write_req.fd, rc);
@@ -334,8 +339,16 @@ static void
 free_client(struct client *client)
 {
 	free(client->buf);
-	if (client->file_fd != -1)
+	if (client->file_fd != -1) {
+		int i;
+		MD5_Final(client->md5, &client->md5handler);
+		sfp_log("MD5=");
+		for (i = 0; i < MD5_DIGEST_LENGTH; i++) {
+			sfp_log("%02x", client->md5[i]);
+		}
+		sfp_log("\n");
 		close(client->file_fd);
+	}
 	free(client);
 }
 
