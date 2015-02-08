@@ -331,6 +331,15 @@ discard_remaining(struct evbuffer *input)
 }
 
 static void
+free_client(struct client *client)
+{
+	free(client->buf);
+	if (client->file_fd != -1)
+		close(client->file_fd);
+	free(client);
+}
+
+static void
 readcb(struct bufferevent *bev, void *ctx)
 {
 	struct evbuffer *input, *output;
@@ -361,18 +370,15 @@ readcb(struct bufferevent *bev, void *ctx)
 	}
 
 	if (rc) {
-		fprintf(stderr, "freeing client\n");
+		fprintf(stderr, "process message error: freeing client\n");
 		bufferevent_free(bev);
-		free(client->buf);
-		if (client->file_fd != -1)
-			close(client->file_fd);
-		free(client);
+		free_client(client);
 	}
 //	evbuffer_add(output, "\n", 1);
 }
 
 static void
-errorcb(struct bufferevent *bev, short error, void *ctx)
+errorcb(struct bufferevent *bev, short error, void *arg)
 {
 	if (error & BEV_EVENT_EOF) {
 		/* connection has been closed, do any clean up here */
@@ -385,7 +391,7 @@ errorcb(struct bufferevent *bev, short error, void *ctx)
 		/* ... */
 	}
 	bufferevent_free(bev);
-	free(ctx);
+	free_client(arg);
 }
 
 static int to_thread = 0;
