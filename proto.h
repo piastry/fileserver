@@ -65,6 +65,7 @@ struct sfp_write_req {
 
 struct sfp_write_rsp {
 	struct sfp_hdr hdr;
+	uint64_t len;
 };
 
 struct sfp_read_req {
@@ -108,7 +109,7 @@ char * sfp_create_write_req(const int fd, char *buf, const size_t len,
 
 int sfp_pack_write_rsp(msgpack_packer *pk, void *data);
 int sfp_unpack_write_rsp(msgpack_unpacker *pac, void *data);
-char * sfp_create_write_rsp(const int res, size_t *size);
+char * sfp_create_write_rsp(const ssize_t res, size_t *size);
 int sfp_parse_write_rsp(const char *buf, const size_t size,
 			struct sfp_write_rsp *write_rsp);
 

@@ -152,7 +152,7 @@ process_write(msgpack_unpacker *pac, struct sfp_hdr *hdr,
 	struct sfp_write_req write_req;
 	char *buf;
 	size_t size;
-	int rc;
+	ssize_t rc;
 	unsigned char md5[MD5_DIGEST_LENGTH];
 
 	memcpy(&write_req.hdr, hdr, sizeof(struct sfp_hdr));
@@ -171,7 +171,7 @@ process_write(msgpack_unpacker *pac, struct sfp_hdr *hdr,
 	else
 		rc = -ESTALE;
 
-	sfp_log("write file client_fd=%d, write_fd=%d, return %d\n", client->file_fd, write_req.fd, rc);
+	sfp_log("write file client_fd=%d, write_fd=%d, return %zd\n", client->file_fd, write_req.fd, rc);
 
 	buf = sfp_create_write_rsp(rc, &size);
 	if (buf) {

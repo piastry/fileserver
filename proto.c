@@ -363,15 +363,30 @@ sfp_unpack_write_req(msgpack_unpacker *pac, struct sfp_write_req *write_req)
 int
 sfp_pack_write_rsp(msgpack_packer *pk, void *data)
 {
-	/* Nothing to do here */
-	return 0;
+	struct sfp_write_rsp *write_rsp = (struct sfp_write_rsp *)data;
+
+	return msgpack_pack_uint64(pk, write_rsp->len);
 }
 
 int
 sfp_unpack_write_rsp(msgpack_unpacker *pac, void *data)
 {
-	/* Nothing to do here */
-	return 0;
+	msgpack_unpacked msg;
+	msgpack_object root;
+	struct sfp_write_rsp *write_rsp = (struct sfp_write_rsp *)data;
+
+	msgpack_unpacked_init(&msg);
+
+	/* unpack length */
+	if (!msgpack_unpacker_next(pac, &msg))
+		return unpacked_destroy_and_exit(&msg, -1);
+	root = msg.data;
+	msgpack_print(root);
+	if (root.type != MSGPACK_OBJECT_POSITIVE_INTEGER)
+		return unpacked_destroy_and_exit(&msg, -1);
+	write_rsp->len = (uint64_t)root.via.u64;
+
+	return unpacked_destroy_and_exit(&msg, 0);;
 }
 
 char *
@@ -391,12 +406,17 @@ sfp_create_write_req(const int fd, char *buf, const size_t len,
 }
 
 char *
-sfp_create_write_rsp(const int res, size_t *size)
+sfp_create_write_rsp(const ssize_t res, size_t *size)
 {
 	struct sfp_write_rsp write_rsp;
 
 	write_rsp.hdr.op = SFP_OP_WRITE;
 	write_rsp.hdr.status = res >= 0 ? 0 : res;
+	if (!write_rsp.hdr.status) {
+		write_rsp.len = res;
+	} else {
+		write_rsp.len = 0;
+	}
 
 	return create_message(&write_rsp, sfp_pack_write_rsp, size);
 }
