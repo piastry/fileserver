@@ -2,6 +2,9 @@
  * The description of the Simple File Protocol.
  */
 
+#ifndef _PROTO_H_
+#define _PROTO_H_
+
 #define DEBUG 1
 
 #include <linux/types.h>
@@ -120,3 +123,5 @@ int sfp_unpack_read_rsp(msgpack_unpacker *pac, void *data);
 char * sfp_create_read_rsp(const ssize_t res, char *buf, size_t *size);
 int sfp_parse_read_rsp(const char *buf, const size_t size,
 		       struct sfp_read_rsp *read_rsp);
+
+#endif
