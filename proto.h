@@ -5,7 +5,7 @@
 #ifndef _PROTO_H_
 #define _PROTO_H_
 
-#define DEBUG 1
+#define DEBUG 0
 
 #include <linux/types.h>
 #include <string.h>
