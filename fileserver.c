@@ -69,38 +69,21 @@ client_init(struct worker *worker)
 }
 
 static int
-open_lock_file(struct sfp_open_req *open_req, const char *dir)
+open_file(const char *filename, const uint8_t mode)
 {
-	int fd, mode = 0;
-	char *file_path;
-	size_t dir_path_len = strlen(dir);
-	size_t file_name_len = strlen(open_req->filename);
-	size_t path_len = dir_path_len + file_name_len;
+	int fd, flags = 0;
 
-	file_path = malloc(path_len + 1);
-	if (!file_path) {
-		perror("open file malloc");
-		return EXIT_FAILURE;
-	}
-	memcpy(file_path, dir, dir_path_len);
-	memcpy(file_path + dir_path_len, open_req->filename, file_name_len);
-	file_path[path_len] = '\0';
+	if (mode == SFP_OMODE_READ)
+		flags |= O_RDONLY;
+	else if (mode == SFP_OMODE_WRITE)
+		flags |= O_WRONLY | O_TRUNC | O_CREAT;
 
-	if (open_req->mode == SFP_OMODE_READ)
-		mode |= O_RDONLY;
-	else if (open_req->mode == SFP_OMODE_WRITE)
-		mode |= O_WRONLY | O_TRUNC | O_CREAT;
-
-	fd = open(file_path, mode, S_IRWXU | S_IRWXG | S_IRWXO);
+	fd = open(filename, flags, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (fd < 0) {
-		free(file_path);
 		perror("open file");
 		return fd;
 	}
 
-	/* lock file */
-
-	free(file_path);
 	return fd;
 }
 
@@ -121,18 +104,33 @@ process_open(msgpack_unpacker *pac, struct sfp_hdr *hdr,
 	struct sfp_open_req open_req;
 	int rc, fd;
 	char *buf = NULL;
-	size_t size;
+	size_t size, fnlen;
+	char *filename;
+	size_t plen = strlen(client->worker->path);
 
 	memcpy(&open_req.hdr, hdr, sizeof(struct sfp_hdr));
 	rc = sfp_unpack_open_req(pac, &open_req);
 	if (rc)
 		return rc;
 
-	fd = open_lock_file(&open_req, client->worker->path);
+	fnlen = strlen(open_req.filename);
+
+	filename = malloc(plen + fnlen + 1);
+	if (!filename) {
+		perror("malloc filename");
+		return -1;
+	}
+	memcpy(filename, client->worker->path, plen);
+	memcpy(filename + plen, open_req.filename, fnlen);
+	filename[plen + fnlen] = '\0';
+
+	fd = open_file(filename, open_req.mode);
 	if (fd >= 0) {
 		MD5_Init(&client->md5handler);
 		client->file_fd = fd;
 	}
+
+	free(filename);
 
 	sfp_log("open file %s, mode=%d: fid=%d\n", open_req.filename, open_req.mode, fd);
 
