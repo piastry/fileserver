@@ -421,7 +421,6 @@ readcb(struct bufferevent *bev, void *ctx)
 		bufferevent_free(bev);
 		free_client(client);
 	}
-//	evbuffer_add(output, "\n", 1);
 }
 
 static void
@@ -507,11 +506,8 @@ worker_thread(void *arg)
 
 	evthread_make_base_notifiable(w->base);
 
-	while (event_base_dispatch(w->base) == 1) {
-	//	sfp_log("before sleep %zu\n", w->tid);
+	while (event_base_dispatch(w->base) == 1)
 		usleep(THREAD_DISPATCH_TIMEOUT);
-	//	sfp_log("after sleep %zu\n", w->tid);
-	}
 
 	event_base_free(w->base);
 
@@ -531,7 +527,7 @@ thread_pool_create(const char *path)
 		workers[i].path = malloc(len + 1);
 		if (!workers[i].path) {
 			fprintf(stderr, "thread path malloc error\n");
-			return EXIT_FAILURE;
+			return -1;
 		}
 		memcpy(workers[i].path, path, len);
 		workers[i].path[len] = '\0';
