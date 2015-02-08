@@ -48,7 +48,7 @@ main(int argc, char **argv)
 	int sock = -1;
 	struct sockaddr_in server;
 	FILE *file = NULL;
-	char buf[SFP_DATA_SIZE - PACKED_WSIZE];
+	char buf[SFP_DATA_SIZE];
 	size_t len, off, msg_size;
 	char *msg, *filename;
 	struct sfp_open_rsp open_rsp;
