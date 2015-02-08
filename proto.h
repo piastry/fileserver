@@ -85,7 +85,7 @@ unpacked_destroy_and_exit(msgpack_unpacked *msg, int rc)
 	return rc;
 }
 
-int sfp_pack_hdr(msgpack_packer *pk, uint8_t op, int32_t status);
+int sfp_pack_hdr(msgpack_packer *pk, struct sfp_hdr *hdr);
 int sfp_unpack_hdr(msgpack_unpacker *pac, struct sfp_hdr *hdr);
 
 int sfp_pack_open_req(msgpack_packer *pk, void *data);

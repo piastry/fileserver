@@ -15,7 +15,7 @@
 	} while (0);
 
 int
-sfp_pack_hdr(msgpack_packer *pk, uint8_t op, int32_t status)
+sfp_pack_hdr(msgpack_packer *pk, struct sfp_hdr *hdr)
 {
 	int rc;
 
@@ -25,10 +25,10 @@ sfp_pack_hdr(msgpack_packer *pk, uint8_t op, int32_t status)
 	rc = msgpack_pack_raw_body(pk, " sfp", 4);
 	if (rc)
 		return rc;
-	rc = msgpack_pack_uint8(pk, op);
+	rc = msgpack_pack_uint8(pk, hdr->op);
 	if (rc)
 		return rc;
-	return msgpack_pack_int32(pk, status);
+	return msgpack_pack_int32(pk, hdr->status);
 }
 
 int
@@ -83,9 +83,6 @@ sfp_pack_open_req(msgpack_packer *pk, void *data)
 	struct sfp_open_req *open_req = (struct sfp_open_req *)data;
 	size_t len = strlen(open_req->filename);
 
-	rc = sfp_pack_hdr(pk, SFP_OP_OPEN, 0);
-	if (rc)
-		return rc;
 	rc = msgpack_pack_uint8(pk, open_req->mode);
 	if (rc)
 		return rc;
@@ -132,12 +129,8 @@ sfp_unpack_open_req(msgpack_unpacker *pac, struct sfp_open_req *open_req)
 int
 sfp_pack_open_rsp(msgpack_packer *pk, void *data)
 {
-	int rc;
 	struct sfp_open_rsp *open_rsp = (struct sfp_open_rsp *)data;
 
-	rc = sfp_pack_hdr(pk, SFP_OP_OPEN, open_rsp->hdr.status);
-	if (rc)
-		return rc;
 	return msgpack_pack_uint32(pk, open_rsp->fd);
 }
 
@@ -178,6 +171,12 @@ create_message(void *data, int (*pack_data)(msgpack_packer *, void *),
 
 	pk = msgpack_packer_new(buffer, msgpack_sbuffer_write);
 	if (!pk) {
+		msgpack_sbuffer_free(buffer);
+		return NULL;
+	}
+
+	if (sfp_pack_hdr(pk, data)) {
+		msgpack_packer_free(pk);
 		msgpack_sbuffer_free(buffer);
 		return NULL;
 	}
@@ -253,6 +252,8 @@ sfp_create_open_req(char *filename, uint8_t mode, size_t *size)
 
 	open_req.filename = filename;
 	open_req.mode = mode;
+	open_req.hdr.op = SFP_OP_OPEN;
+	open_req.hdr.status = 0;
 
 	return create_message(&open_req, sfp_pack_open_req, size);
 }
@@ -263,6 +264,7 @@ sfp_create_open_rsp(const int fd, size_t *size)
 	struct sfp_open_rsp open_rsp;
 
 	open_rsp.fd = fd >= 0 ? fd : -1;
+	open_rsp.hdr.op = SFP_OP_OPEN;
 	open_rsp.hdr.status = fd < 0 ? fd : 0;
 
 	return create_message(&open_rsp, sfp_pack_open_rsp, size);
@@ -275,9 +277,6 @@ sfp_pack_write_req(msgpack_packer *pk, void *data)
 	struct sfp_write_req *write_req = (struct sfp_write_req *)data;
 	unsigned char md5[MD5_DIGEST_LENGTH];
 
-	rc = sfp_pack_hdr(pk, SFP_OP_WRITE, 0);
-	if (rc)
-		return rc;
 	rc = msgpack_pack_uint32(pk, write_req->fd);
 	if (rc)
 		return rc;
@@ -364,8 +363,8 @@ sfp_unpack_write_req(msgpack_unpacker *pac, struct sfp_write_req *write_req)
 int
 sfp_pack_write_rsp(msgpack_packer *pk, void *data)
 {
-	return sfp_pack_hdr(pk, SFP_OP_WRITE,
-			    ((struct sfp_write_rsp *)data)->hdr.status);
+	/* Nothing to do here */
+	return 0;
 }
 
 int
@@ -385,6 +384,8 @@ sfp_create_write_req(const int fd, char *buf, const size_t len,
 	write_req.buf = buf;
 	write_req.len = len;
 	write_req.off = off;
+	write_req.hdr.op = SFP_OP_WRITE;
+	write_req.hdr.status = 0;
 
 	return create_message(&write_req, sfp_pack_write_req, size);
 }
@@ -394,6 +395,7 @@ sfp_create_write_rsp(const int res, size_t *size)
 {
 	struct sfp_write_rsp write_rsp;
 
+	write_rsp.hdr.op = SFP_OP_WRITE;
 	write_rsp.hdr.status = res >= 0 ? 0 : res;
 
 	return create_message(&write_rsp, sfp_pack_write_rsp, size);
@@ -413,9 +415,6 @@ sfp_pack_read_req(msgpack_packer *pk, void *data)
 	int rc;
 	struct sfp_read_req *read_req = (struct sfp_read_req *)data;
 
-	rc = sfp_pack_hdr(pk, SFP_OP_READ, 0);
-	if (rc)
-		return rc;
 	rc = msgpack_pack_uint32(pk, read_req->fd);
 	if (rc)
 		return rc;
@@ -470,9 +469,6 @@ sfp_pack_read_rsp(msgpack_packer *pk, void *data)
 	struct sfp_read_rsp *read_rsp = (struct sfp_read_rsp *)data;
 	unsigned char md5[MD5_DIGEST_LENGTH];
 
-	rc = sfp_pack_hdr(pk, SFP_OP_READ, read_rsp->hdr.status);
-	if (rc)
-		return rc;
 	rc = msgpack_pack_uint64(pk, read_rsp->len);
 	if (rc)
 		return rc;
@@ -542,6 +538,8 @@ sfp_create_read_req(const int fd, const size_t len,
 	read_req.fd = fd;
 	read_req.len = len;
 	read_req.off = off;
+	read_req.hdr.op = SFP_OP_READ;
+	read_req.hdr.status = 0;
 
 	return create_message(&read_req, sfp_pack_read_req, size);
 }
@@ -552,6 +550,7 @@ sfp_create_read_rsp(const ssize_t res, char *buf, size_t *size)
 	struct sfp_read_rsp read_rsp;
 	char tmpbuf[0];
 
+	read_rsp.hdr.op = SFP_OP_READ;
 	read_rsp.hdr.status = res >= 0 ? 0 : res;
 	if (!read_rsp.hdr.status) {
 		read_rsp.buf = buf;
