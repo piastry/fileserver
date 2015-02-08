@@ -694,13 +694,10 @@ main(int argc, char **argv)
 		}
 	}
 
-//	pid = fork();
-//	if (pid) {
-//		sfp_log("parent process\n");
-//		return 0;
-//	}
+	pid = fork();
+	if (pid)
+		return 0;
 
-//	sfp_log("child process\n");
 	rc = fileserver(path, port);
 	free(tofree);
 	exit(rc);
