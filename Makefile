@@ -7,11 +7,14 @@ all: fileserver push pull
 fileserver: fileserver.c proto.o
 	$(CC) $< proto.o -o $@ $(SRV_LDFLAGS)
 
-push: push.c proto.o
-	$(CC) $< proto.o -o $@ $(CLI_LDFLAGS)
+push: push.c proto.o utils.o
+	$(CC) $< proto.o utils.o -o $@ $(CLI_LDFLAGS)
 
-pull: pull.c proto.o
-	$(CC) $< proto.o -o $@ $(CLI_LDFLAGS)
+pull: pull.c proto.o utils.o
+	$(CC) $< proto.o utils.o -o $@ $(CLI_LDFLAGS)
+
+utils.o: utils.c
+	$(CC) -c $< -o $@
 
 proto.o: proto.c
 	$(CC) -c $< -o $@
