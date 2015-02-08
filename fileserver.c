@@ -40,12 +40,17 @@ struct client {
 	MD5_CTX md5handler;
 	unsigned char md5[MD5_DIGEST_LENGTH];
 	int file_fd;
+	int mode;
 	int state;
+	char *fname;
 	char *buf;
 	char *cur;
 	size_t buf_size;
 	size_t remaining_size;
 };
+
+#define SFP_MD5_SUFFIX ".md5"
+#define SFP_MD5_SUFFIX_SIZE sizeof(SFP_MD5_SUFFIX)
 
 static struct worker workers[NUM_THREADS-1];
 static struct event_base *accept_base;
@@ -115,7 +120,7 @@ process_open(msgpack_unpacker *pac, struct sfp_hdr *hdr,
 
 	fnlen = strlen(open_req.filename);
 
-	filename = malloc(plen + fnlen + 1);
+	filename = malloc(plen + fnlen + 1 + SFP_MD5_SUFFIX_SIZE);
 	if (!filename) {
 		perror("malloc filename");
 		return -1;
@@ -126,8 +131,12 @@ process_open(msgpack_unpacker *pac, struct sfp_hdr *hdr,
 
 	fd = open_file(filename, open_req.mode);
 	if (fd >= 0) {
-		MD5_Init(&client->md5handler);
+		if (open_req.mode == SFP_OMODE_WRITE)
+			MD5_Init(&client->md5handler);
+		client->mode = open_req.mode;
 		client->file_fd = fd;
+		client->fname = filename;
+		filename = NULL;
 	}
 
 	free(filename);
@@ -333,19 +342,46 @@ discard_remaining(struct evbuffer *input)
 		len = evbuffer_remove(input, buf, sizeof(buf));
 }
 
+static int
+store_md5(struct client *client)
+{
+	int i;
+	size_t len = strlen(client->fname);
+	FILE *file;
+
+	memcpy(client->fname + len, SFP_MD5_SUFFIX, SFP_MD5_SUFFIX_SIZE);
+	client->fname[len + SFP_MD5_SUFFIX_SIZE] = '\0';
+	file = fopen(client->fname, "w");
+	if (!file) {
+		perror("can't create MD5 file");
+		return -1;
+	}
+
+	for (i = 0; i < MD5_DIGEST_LENGTH; i++)
+		fprintf(file, "%02x", client->md5[i]);
+
+	fprintf(file, "\n");
+	fclose(file);
+}
+
 static void
 free_client(struct client *client)
 {
 	free(client->buf);
 	if (client->file_fd != -1) {
-		int i;
-		MD5_Final(client->md5, &client->md5handler);
-		sfp_log("MD5=");
-		for (i = 0; i < MD5_DIGEST_LENGTH; i++) {
-			sfp_log("%02x", client->md5[i]);
+		if (client->mode == SFP_OMODE_WRITE) {
+			int i;
+
+			MD5_Final(client->md5, &client->md5handler);
+			sfp_log("MD5=");
+			for (i = 0; i < MD5_DIGEST_LENGTH; i++) {
+				sfp_log("%02x", client->md5[i]);
+			}
+			sfp_log("\n");
+			store_md5(client);
 		}
-		sfp_log("\n");
 		close(client->file_fd);
+		free(client->fname);
 	}
 	free(client);
 }
