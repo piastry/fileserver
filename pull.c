@@ -120,6 +120,53 @@ sfp_open_file(const int sock, char *filename, const int flags,
 }
 
 int
+sfp_read_file(const int sock, const int fd, const size_t len, const size_t off,
+	      struct sfp_read_rsp *read_rsp)
+{
+	char *msg;
+	size_t msg_size;
+	unsigned char md5[MD5_DIGEST_LENGTH];
+
+	msg = sfp_create_read_req(fd, len, off, &msg_size);
+	if (!msg) {
+		fprintf(stderr, "can't create read req\n");
+		return -1;
+	}
+
+	if (send(sock, msg, msg_size, 0) <= 0) {
+		free(msg);
+		fprintf(stderr, "can't send read request\n");
+		return -1;
+	}
+
+	free(msg);
+
+	msg = sfp_get_resp(sock, &msg_size);
+	if (!msg)
+		return -1;
+
+	if (sfp_parse_read_rsp(msg, msg_size, read_rsp)) {
+		free(msg);
+		fprintf(stderr, "can't parse read rsp\n");
+		return -1;
+	}
+
+	free(msg);
+
+	MD5(read_rsp->buf, read_rsp->len, md5);
+	if (memcmp(read_rsp->md5, md5, MD5_DIGEST_LENGTH)) {
+		fprintf(stderr, "MD5 checksum mismatches\n");
+		return -1;
+	}
+
+	sfp_log("%*.s\n", 4, read_rsp->hdr.proto);
+	sfp_log("%u\n", read_rsp->hdr.op);
+	sfp_log("%d\n", read_rsp->hdr.status);
+
+	return 0;
+}
+
+int
 main(int argc, char **argv)
 {
 	int sock = -1;
@@ -134,7 +181,6 @@ main(int argc, char **argv)
 	char def_ip[] = "127.0.0.1";
 	char *ip = def_ip;
 	int port = FILESERVER_PORT;
-	unsigned char md5[MD5_DIGEST_LENGTH];
 	int rc;
 
 	if (argc < 2 || argc > 4) {
@@ -188,55 +234,16 @@ main(int argc, char **argv)
 
 	off = 0;
 	do {
-		msg = sfp_create_read_req(open_rsp.fd, SFP_DATA_SIZE - PACKED_RSIZE, off, &msg_size);
-		if (!msg) {
-			errprint_and_clean(sock, file, "can't create read req");
-			exit(EXIT_FAILURE);
-		}
-
-		if (send(sock, msg, msg_size, 0) <= 0) {
-			free(msg);
-			errprint_and_clean(sock, file, "can't send read req");
-			exit(EXIT_FAILURE);
-		}
-
-		free(msg);
-
-		if ((rc = get_bytes(sock, &len, 4)) <= 0) {
-			errprint_and_clean(sock, file, "wrong read rsp length");
-			exit(EXIT_FAILURE);
-		}
-
-		len = be32toh(len);
-
-		if (len > SFP_DATA_SIZE) {
-			errprint_and_clean(sock, file, "received buffer is too big");
-			exit(EXIT_FAILURE);
-		}
-
-		if (get_bytes(sock, buf, len) <= 0) {
-			errprint_and_clean(sock, file, "can't receive read rsp");
-			exit(EXIT_FAILURE);
-		}
-
-		if (sfp_parse_read_rsp(buf, len, &read_rsp)) {
-			errprint_and_clean(sock, file, "can't parse read rsp");
+		if (sfp_read_file(sock, open_rsp.fd,
+				SFP_DATA_SIZE - PACKED_RSIZE, off, &read_rsp)) {
+			errprint_and_clean(sock, file, "can't process read file");
 			exit(EXIT_FAILURE);
 		}
 
 		memcpy(buf, read_rsp.buf, read_rsp.len);
 		free(read_rsp.buf);
 
-		MD5(buf, read_rsp.len, md5);
-		if (memcmp(read_rsp.md5, md5, MD5_DIGEST_LENGTH)) {
-			errprint_and_clean(sock, file, "MD5 checksum mismatches");
-			exit(EXIT_FAILURE);
-		}
-
 		off += read_rsp.len;
-		sfp_log("%*.s\n", 4, read_rsp.hdr.proto);
-		sfp_log("%u\n", read_rsp.hdr.op);
-		sfp_log("%d\n", read_rsp.hdr.status);
 	} while (len = fwrite(buf, 1, read_rsp.len, file));
 
 	close(sock);
