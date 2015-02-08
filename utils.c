@@ -98,6 +98,44 @@ sfp_open_file(const int sock, char *filename, const int flags,
 }
 
 int
+sfp_write_file(const int sock, const int fd, const size_t len, const size_t off,
+	       char *buf, struct sfp_write_rsp *write_rsp)
+{
+	char *msg;
+	size_t msg_size;
+
+	msg = sfp_create_write_req(fd, buf, len, off, &msg_size);
+	if (!msg) {
+		fprintf(stderr, "can't create write req\n");
+		return -1;
+	}
+
+	if (send(sock, msg, msg_size, 0) <= 0) {
+		free(msg);
+		fprintf(stderr, "can't send write request\n");
+		return -1;
+	}
+
+	free(msg);
+
+	msg = get_resp(sock, &msg_size);
+	if (!msg)
+		return -1;
+
+	if (sfp_parse_write_rsp(msg, msg_size, write_rsp)) {
+		free(msg);
+		fprintf(stderr, "can't parse write rsp\n");
+		return -1;
+	}
+
+	sfp_log("%*.s\n", 4, write_rsp->hdr.proto);
+	sfp_log("%u\n", write_rsp->hdr.op);
+	sfp_log("%d\n", write_rsp->hdr.status);
+
+	return 0;
+}
+
+int
 sfp_read_file(const int sock, const int fd, const size_t len, const size_t off,
 	      struct sfp_read_rsp *read_rsp)
 {

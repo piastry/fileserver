@@ -18,6 +18,10 @@
 int sfp_open_file(const int sock, char *filename, const int flags,
 		  struct sfp_open_rsp *open_rsp);
 
+int sfp_write_file(const int sock, const int fd, const size_t len,
+		   const size_t off, char *buf,
+		   struct sfp_write_rsp *write_rsp);
+
 int sfp_read_file(const int sock, const int fd, const size_t len,
 		  const size_t off, struct sfp_read_rsp *read_rsp);
 
