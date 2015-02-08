@@ -80,10 +80,16 @@ main(int argc, char **argv)
 
 	off = 0;
 	while ((len = fread(buf, 1, SFP_DATA_SIZE - PACKED_WSIZE, file)) > 0) {
-		if (sfp_write_file(sock, open_rsp.fd, len, off, buf, &write_rsp)) {
-			errprint_and_clean(sock, file, "can't process write file");
-			exit(EXIT_FAILURE);
-		}
+		size_t toff = 0;
+
+		do {
+			if (sfp_write_file(sock, open_rsp.fd, len, off + toff,
+								buf, &write_rsp)) {
+				errprint_and_clean(sock, file, "can't process write file");
+				exit(EXIT_FAILURE);
+			}
+			toff += write_rsp.len;
+		} while (toff < len);
 
 		off += len;
 	}
