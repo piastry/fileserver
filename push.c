@@ -10,7 +10,7 @@
 
 #include "utils.h"
 
-#define PACKED_WSIZE 40
+#define PACKED_WSIZE 50
 
 int
 main(int argc, char **argv)

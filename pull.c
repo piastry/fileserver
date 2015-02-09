@@ -11,7 +11,7 @@
 #include "utils.h"
 
 #define FILESERVER_PORT 1113
-#define PACKED_RSIZE 40
+#define PACKED_RSIZE 50
 
 int
 main(int argc, char **argv)
