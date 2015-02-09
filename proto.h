@@ -38,7 +38,6 @@ struct sfp_hdr {
 #define SFP_OP_OPEN  0
 #define SFP_OP_READ  1
 #define SFP_OP_WRITE 2
-#define SFP_OP_CLOSE 3
 
 struct sfp_open_req {
 	struct sfp_hdr hdr;

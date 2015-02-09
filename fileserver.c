@@ -268,8 +268,6 @@ process_message(struct client *client, struct evbuffer *output)
 	case SFP_OP_WRITE:
 		rc = process_write(&pac, &hdr, output, client);
 		break;
-	case SFP_OP_CLOSE:
-		break;
 	dafault:
 		break;
 	}
