@@ -428,14 +428,11 @@ static void
 errorcb(struct bufferevent *bev, short error, void *arg)
 {
 	if (error & BEV_EVENT_EOF) {
-		/* connection has been closed, do any clean up here */
-		/* ... */
+		/* connection has been closed */
 	} else if (error & BEV_EVENT_ERROR) {
-		/* check errno to see what error occurred */
-		/* ... */
+		/* check errno */
 	} else if (error & BEV_EVENT_TIMEOUT) {
-		/* must be a timeout event handle, handle it */
-		/* ... */
+		/* timeout event handle */
 	}
 	bufferevent_free(bev);
 	free_client(arg);
