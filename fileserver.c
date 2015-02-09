@@ -695,8 +695,14 @@ main(int argc, char **argv)
 	}
 
 	pid = fork();
-	if (pid)
-		return 0;
+	if (pid) {
+		if (pid > 0)
+			exit(EXIT_SUCCESS);
+		else {
+			fprintf(stderr, "error: can't run fileserver\n");
+			exit(EXIT_FAILURE);
+		}
+	}
 
 	rc = fileserver(path, port);
 	free(tofree);
