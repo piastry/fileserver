@@ -90,9 +90,15 @@ main(int argc, char **argv)
 		free(read_rsp.buf);
 
 		off += read_rsp.len;
-	} while (len = fwrite(buf, 1, read_rsp.len, file));
+	} while ((len = fwrite(buf, 1, read_rsp.len, file)) > 0);
 
 	close(sock);
 	fclose(file);
+
+	if (len < 0) {
+		fprintf(stderr, "error: can't write to the file\n");
+		exit(EXIT_FAILURE);
+	}
+
 	exit(EXIT_SUCCESS);
 }

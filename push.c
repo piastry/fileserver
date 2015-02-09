@@ -95,5 +95,11 @@ main(int argc, char **argv)
 
 	close(sock);
 	fclose(file);
+
+	if (len < 0) {
+		fprintf(stderr, "error: can't read from the file\n");
+		exit(EXIT_FAILURE);
+	}
+
 	exit(EXIT_SUCCESS);
 }
