@@ -24,7 +24,7 @@
 #endif
 
 #define SFP_HEADER_SIZE 4
-#define SFP_DATA_SIZE 65532
+#define SFP_DATA_SIZE (65536 * 5 - SFP_HEADER_SIZE)
 
 #define SFP_SERVER_PORT 1115
 
