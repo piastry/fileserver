@@ -20,7 +20,8 @@ main(int argc, char **argv)
 	struct sockaddr_in server;
 	FILE *file = NULL;
 	char buf[SFP_DATA_SIZE];
-	size_t len, off;
+	size_t off;
+	ssize_t len;
 	char *filename;
 	struct sfp_open_rsp open_rsp;
 	struct sfp_read_rsp read_rsp;
